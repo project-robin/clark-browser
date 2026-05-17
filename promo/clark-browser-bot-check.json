@@ -1,0 +1,23 @@
+{
+  "url": "https://bot.sannysoft.com/",
+  "title": "Antibot",
+  "signals": {
+    "webdriver": false,
+    "plugins": 5,
+    "chromeObject": "object",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "platform": "Win32",
+    "languages": [
+      "en-US"
+    ]
+  },
+  "required_text_found": [
+    "missing (passed)",
+    "WebDriver Advanced\tpassed",
+    "present (passed)",
+    "PHANTOM_UA\tok",
+    "HEADCHR_UA\tok",
+    "HEADCHR_CHROME_OBJ\tok",
+    "HEADCHR_PLUGINS\tok"
+  ]
+}

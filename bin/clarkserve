@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+# Copyright 2026 Clark Labs Inc.
+# SPDX-License-Identifier: MIT
+"""clarkserve — CDP server: launch the patched Chromium and expose CDP on a known port.
+
+Usage:
+    clarkserve [--port=9222] [--headless=true] [--data-dir=/tmp/clarkserve]
+               [--fingerprint=<seed>] [--fingerprint-platform=windows]
+               [...any other --fingerprint-* flag...]
+
+Connect from Playwright:
+    pw.chromium.connect_over_cdp("http://localhost:9222")
+
+Lighter than cloakserve — no multiplexing. One Chromium process. If you need
+per-connection fingerprints, spawn one clarkserve per identity on different ports.
+"""
+from __future__ import annotations
+
+import logging
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from clarkbrowser.config import get_default_stealth_args
+from clarkbrowser.download import ensure_binary
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("clarkserve")
+
+
+def parse_args(argv: list[str]) -> tuple[dict, list[str]]:
+    """Split clarkserve-owned switches from passthrough to Chromium."""
+    config: dict = {
+        "port": 9222,
+        "headless": True,
+        "data_dir": None,
+    }
+    passthrough: list[str] = []
+    for arg in argv:
+        if arg.startswith("--port="):
+            config["port"] = int(arg.split("=", 1)[1])
+        elif arg.startswith("--data-dir="):
+            config["data_dir"] = arg.split("=", 1)[1]
+        elif arg in ("--headless=false", "--headless=False"):
+            config["headless"] = False
+        else:
+            passthrough.append(arg)
+
+    if config["data_dir"] is None:
+        in_container = os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv")
+        config["data_dir"] = (
+            "/tmp/clarkserve"
+            if in_container
+            else str(Path.home() / ".clarkbrowser" / "clarkserve")
+        )
+    return config, passthrough
+
+
+def main() -> None:
+    binary = ensure_binary()
+    config, passthrough = parse_args(sys.argv[1:])
+
+    os.makedirs(config["data_dir"], exist_ok=True)
+
+    args = [binary, *get_default_stealth_args()]
+    if config["headless"]:
+        args.append("--headless=new")
+    args += [
+        f"--remote-debugging-port={config['port']}",
+        "--remote-debugging-address=0.0.0.0",
+        f"--user-data-dir={config['data_dir']}",
+        "--no-sandbox",
+        "--use-mock-keychain",
+        "--no-first-run",
+        "--no-default-browser-check",
+        *passthrough,
+    ]
+
+    logger.info("Launching clark Chromium on port %d", config["port"])
+    logger.info("Connect: playwright.chromium.connect_over_cdp('http://localhost:%d')",
+                config["port"])
+
+    proc = subprocess.Popen(args)
+
+    def stop(*_):
+        logger.info("Stopping Chromium")
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop)
+
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        stop()
+
+
+if __name__ == "__main__":
+    main()

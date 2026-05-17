@@ -1,0 +1,116 @@
+# clark-browser Linux x86_64 build via GitHub Actions.
+#
+# Runs build-linux.sh natively on a linux/amd64 runner (no Rosetta, no
+# emulation). Uploads the headless_shell tar.gz as a workflow artifact
+# and, when triggered with a release tag input, attaches it to the GitHub
+# Release.
+#
+# The chromium tree needs ~80 GB of free disk. Free GitHub-hosted runners
+# only have ~14 GB. We free another ~30 GB via jlumbroso/free-disk-space
+# (removes pre-installed Android SDK / .NET / Haskell / Boost / etc) and
+# build the smaller headless_shell target instead of full chromium. If the
+# build still hits disk pressure, switch `runs-on` to a paid larger runner.
+
+name: build-linux-x64
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to attach the artifact to (blank = artifact only)"
+        required: false
+        default: ""
+      runner:
+        description: "Runner size: ubuntu-22.04 (free, may OOD) or ubuntu-22.04-large"
+        required: false
+        default: "ubuntu-22.04"
+
+permissions:
+  contents: write   # needed for `gh release upload`
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 360
+    env:
+      CLARK_UC_TAG: 148.0.7778.96-1
+
+    steps:
+      - name: Reclaim runner disk space (~30 GB)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+
+      - name: Show free space
+        run: df -h
+
+      - name: Checkout clark-browser
+        uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates curl wget git python3 python3-pip python3-venv \
+            python3-httplib2 lsb-release \
+            ninja-build clang lld llvm \
+            build-essential pkg-config libgbm-dev libnss3-dev \
+            libxss1 libasound2t64 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+            libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
+            libgtk-3-0t64 libpangocairo-1.0-0 libcups2t64 \
+            libdrm2 libxkbcommon0 libxkbcommon-dev libpci-dev libgtk-3-dev \
+            libdrm-dev libegl1-mesa-dev libgles2-mesa-dev libwayland-dev \
+            libpulse-dev libxml2-dev libxslt1-dev libnotify-dev \
+            libcap-dev libudev-dev libgcrypt20-dev libdbus-1-dev \
+            libsystemd-dev libssl-dev libnss3 libatspi2.0-dev \
+            libcurl4-openssl-dev libdouble-conversion-dev \
+            libffi-dev libfontconfig1-dev libfreetype-dev \
+            libglib2.0-dev libharfbuzz-dev libicu-dev \
+            libjpeg-dev libjsoncpp-dev liblcms2-dev libopus-dev \
+            libpng-dev libreadline-dev libsqlite3-dev libwebp-dev \
+            libxcursor-dev libxext-dev libxfixes-dev libxi-dev \
+            libxinerama-dev libxkbfile-dev libxrandr-dev libxrender-dev \
+            libxshmfence-dev libxslt1-dev libxss-dev libxtst-dev \
+            libz3-dev mesa-common-dev uuid-dev \
+            bison flex gperf xz-utils zip unzip rsync file sudo
+          pip3 install --break-system-packages websocket-client
+
+      - name: Run build-linux.sh
+        env:
+          CLARK_WORK_DIR: ${{ runner.temp }}/clark-work
+        run: |
+          mkdir -p "$CLARK_WORK_DIR" dist
+          # Bind /patches and /out the same way the docker container does,
+          # but plain symlinks since we're running natively, not in docker.
+          export PATCHES="$GITHUB_WORKSPACE/patches"
+          export OUT="$GITHUB_WORKSPACE/dist"
+          # The build script reads /patches and /out hard-coded; make those
+          # paths point at our checked-out tree.
+          sudo ln -sfn "$PATCHES" /patches
+          sudo ln -sfn "$OUT" /out
+          bash build/build-linux.sh
+
+      - name: Show artifact
+        run: ls -lh dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clark-browser-linux-x64
+          path: dist/clark-browser-linux-x64.tar.gz
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: inputs.release_tag != ''
+        run: |
+          gh release upload "${{ inputs.release_tag }}" \
+            dist/clark-browser-linux-x64.tar.gz --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

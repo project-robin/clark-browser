@@ -1,0 +1,110 @@
+name: publish-python
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Package index to publish to"
+        required: true
+        default: "testpypi"
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Install build tooling
+        run: python3 -m pip install --upgrade build twine
+
+      - name: Check release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(python3 - <<'PY'
+          import ast
+          from pathlib import Path
+
+          tree = ast.parse(Path("clarkbrowser/_version.py").read_text())
+          for node in tree.body:
+              if (
+                  isinstance(node, ast.Assign)
+                  and any(isinstance(t, ast.Name) and t.id == "__version__" for t in node.targets)
+                  and isinstance(node.value, ast.Constant)
+              ):
+                  print(node.value.value)
+                  break
+          else:
+              raise SystemExit("could not find __version__")
+          PY
+          )
+          test "$tag" = "$version" || {
+            echo "tag v$tag does not match clarkbrowser version $version"
+            exit 1
+          }
+
+      - name: Build wheel and sdist
+        run: python3 -m build
+
+      - name: Check package metadata
+        run: python3 -m twine check dist/*
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: clark-browser-dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/clark-browser
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: clark-browser-dist
+          path: dist/
+
+      - name: Publish package distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: Publish to PyPI
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/clark-browser
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: clark-browser-dist
+          path: dist/
+
+      - name: Publish package distributions
+        uses: pypa/gh-action-pypi-publish@release/v1

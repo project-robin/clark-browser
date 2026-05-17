@@ -1,0 +1,31 @@
+# clark-browser — Copyright 2026 Clark Labs Inc. — MIT
+# clark-stealth-chromium patches #11-#12 + #15 — screen dimensions and depth
+# Source: chromium 148.0.7778.96 third_party/blink/renderer/core/frame/screen.cc
+# Covers width/height (#11), availWidth/availHeight (#12), colorDepth/pixelDepth (#15).
+# Clean room: written from CSSOM View spec.
+diff --git a/third_party/blink/renderer/core/frame/screen.cc b/third_party/blink/renderer/core/frame/screen.cc
+index ce772be7a7..50f9510051 100644
+--- a/third_party/blink/renderer/core/frame/screen.cc
++++ b/third_party/blink/renderer/core/frame/screen.cc
+@@ -93,18 +93,9 @@ int Screen::width() const {
+ }
+ 
+ unsigned Screen::colorDepth() const {
+-  // "If the user agent does not know the color depth or does not want to
+-  // return it for privacy considerations, it should return 24."
+-  //
+-  // https://drafts.csswg.org/cssom-view/#dom-screen-colordepth
+-  unsigned unknown_color_depth = 24u;
+-
+-  if (!DomWindow()) {
+-    return unknown_color_depth;
+-  }
+-  return GetScreenInfo().depth == 0
+-             ? unknown_color_depth
+-             : base::saturated_cast<unsigned>(GetScreenInfo().depth);
++  // clark-stealth #15: always 24 (CSSOM View spec recommended).
++  // Real Chrome on every modern desktop reports 24.
++  return 24u;
+ }
+ 
+ unsigned Screen::pixelDepth() const {

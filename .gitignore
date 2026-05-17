@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+# Python's setup.py build output. Narrower guards keep our top-level
+# build/ scripts (Dockerfile.linux, build-linux.sh, …) tracked.
+**/build/lib/
+**/build/bdist*/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+
+# Local build outputs
+out/
+out.tar.gz
+.clarkbrowser/
+
+# Test artifacts
+tests/out/
+examples/*.log
+examples/out/

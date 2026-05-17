@@ -1,0 +1,99 @@
+{
+  "_comment": "WebGL GPU pool — coherent (vendor, renderer, version, extensions) tuples seen on real Chrome installs. Each entry MUST come from a real machine you or a contributor own. Do not scrape browserleaks/webglreport without permission. Selected deterministically by clark::seed::Pick keyed on the fingerprint seed, filtered to entries whose `platforms` matches --fingerprint-platform.",
+  "_schema_version": 1,
+  "entries": [
+    {
+      "key": "intel-iris-xe-win11",
+      "platforms": ["windows"],
+      "ua_platform_version": "10.0.0",
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "gl_version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+      "shading_language_version": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+      "_TODO": "populate `extensions` from a real machine capture; until then, use ANGLE's standard ES2 set"
+    },
+    {
+      "key": "nvidia-rtx-4070-win11",
+      "platforms": ["windows"],
+      "ua_platform_version": "10.0.0",
+      "vendor": "Google Inc. (NVIDIA)",
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "gl_version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+      "shading_language_version": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)"
+    },
+    {
+      "key": "nvidia-rtx-3060-win11",
+      "platforms": ["windows"],
+      "ua_platform_version": "10.0.0",
+      "vendor": "Google Inc. (NVIDIA)",
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002503) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "gl_version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+      "shading_language_version": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)"
+    },
+    {
+      "key": "amd-radeon-rx-7600-win11",
+      "platforms": ["windows"],
+      "ua_platform_version": "10.0.0",
+      "vendor": "Google Inc. (AMD)",
+      "renderer": "ANGLE (AMD, AMD Radeon RX 7600 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "gl_version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+      "shading_language_version": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)"
+    },
+    {
+      "key": "intel-uhd-630-win10",
+      "platforms": ["windows"],
+      "ua_platform_version": "10.0.0",
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 630 (0x00003E9B) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "gl_version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+      "shading_language_version": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)"
+    },
+    {
+      "key": "apple-m1",
+      "platforms": ["macos"],
+      "ua_platform_version": "14.4.1",
+      "vendor": "Apple Inc.",
+      "renderer": "Apple GPU",
+      "gl_version": "WebGL 1.0",
+      "shading_language_version": "WebGL GLSL ES 1.0",
+      "_note": "Apple GPU renderer string is intentionally generic on macOS"
+    },
+    {
+      "key": "apple-m2",
+      "platforms": ["macos"],
+      "ua_platform_version": "14.4.1",
+      "vendor": "Apple Inc.",
+      "renderer": "Apple GPU",
+      "gl_version": "WebGL 1.0",
+      "shading_language_version": "WebGL GLSL ES 1.0"
+    },
+    {
+      "key": "apple-m3",
+      "platforms": ["macos"],
+      "ua_platform_version": "14.4.1",
+      "vendor": "Apple Inc.",
+      "renderer": "Apple GPU",
+      "gl_version": "WebGL 1.0",
+      "shading_language_version": "WebGL GLSL ES 1.0"
+    },
+    {
+      "key": "mesa-llvmpipe-linux",
+      "platforms": ["linux"],
+      "ua_platform_version": "",
+      "vendor": "Mesa",
+      "renderer": "llvmpipe (LLVM 17.0.6, 256 bits)",
+      "gl_version": "WebGL 1.0 (OpenGL ES 2.0 Mesa 23.2.1-1ubuntu3.1~22.04.2)",
+      "shading_language_version": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Mesa 23.2.1)",
+      "_note": "Software renderer — common on Linux servers / containers without GPU"
+    },
+    {
+      "key": "intel-iris-pro-linux",
+      "platforms": ["linux"],
+      "ua_platform_version": "",
+      "vendor": "Intel",
+      "renderer": "Mesa Intel(R) HD Graphics 5500 (BDW GT2)",
+      "gl_version": "WebGL 1.0 (OpenGL ES 2.0 Mesa 23.2.1)",
+      "shading_language_version": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Mesa 23.2.1)"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+name: build-binary
+
+# Builds the patched Chromium binary on release tags only.
+# Needs self-hosted runners (Chromium build is too big for hosted runners).
+# Until those exist, this workflow is documentation of intent.
+
+on:
+  push:
+    tags:
+      - 'chromium-v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos-arm64:
+    runs-on: [self-hosted, macOS, ARM64]
+    if: false  # disabled until self-hosted runner is provisioned
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch source
+        run: ./build/fetch-source.sh
+      - name: Apply patches
+        run: ./build/apply-patches.sh
+      - name: Build
+        run: ./build/build.sh
+      - name: Package
+        run: |
+          cd "$CLARK_WORK_DIR/ungoogled-chromium-macos/build/src/out/Default"
+          tar -czf clark-browser-darwin-arm64.tar.gz Chromium.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clark-browser-darwin-arm64
+          path: ${{ env.CLARK_WORK_DIR }}/ungoogled-chromium-macos/build/src/out/Default/clark-browser-darwin-arm64.tar.gz
+
+  build-linux-x64:
+    runs-on: [self-hosted, linux, x64]
+    if: false  # disabled until self-hosted runner is provisioned
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch source
+        run: ./build/fetch-source.sh
+      - name: Apply patches
+        run: ./build/apply-patches.sh
+      - name: Build
+        run: ./build/build.sh
+      - name: Package
+        run: |
+          cd "$CLARK_WORK_DIR/ungoogled-chromium-debian/build/src/out/Default"
+          tar -czf clark-browser-linux-x64.tar.gz chrome chromedriver \
+            chrome_100_percent.pak chrome_200_percent.pak resources.pak \
+            v8_context_snapshot.bin snapshot_blob.bin icudtl.dat locales
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clark-browser-linux-x64
+          path: ${{ env.CLARK_WORK_DIR }}/ungoogled-chromium-debian/build/src/out/Default/clark-browser-linux-x64.tar.gz

@@ -1,0 +1,172 @@
+# clark-browser — Copyright 2026 Clark Labs Inc. — MIT
+# clark-stealth-chromium patch #16 — WebGL UNMASKED_{VENDOR,RENDERER}_WEBGL
+# from --fingerprint-gpu-{vendor,renderer} (or seed-derived GPU pool entry).
+#
+# Source: chromium 148.0.7778.96
+#   third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+index e3f40494b3..7e1e26a100 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -25,6 +25,35 @@
+ 
+ #include "third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h"
+ 
++#include "base/command_line.h"
++#include "chrome/common/clark_fingerprint_switches.h"
++#include "chrome/common/clark_seed.h"
++
++namespace {
++
++// clark-stealth #18: GPU pool — coherent (vendor, renderer) tuples observed
++// on real Chrome. Selected deterministically by --fingerprint=<seed>.
++struct GpuPoolEntry {
++  const char* vendor;
++  const char* renderer;
++};
++static constexpr GpuPoolEntry kGpuPool[] = {
++    {"Google Inc. (Intel)",
++     "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)"},
++    {"Google Inc. (NVIDIA)",
++     "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002503) Direct3D11 vs_5_0 ps_5_0, D3D11)"},
++    {"Google Inc. (AMD)",
++     "ANGLE (AMD, AMD Radeon RX 7600 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
++    {"Apple Inc.", "Apple GPU"},
++    {"Mesa", "llvmpipe (LLVM 17.0.6, 256 bits)"},
++};
++
++const GpuPoolEntry& ClarkPickGpu() {
++  return clark::seed::Pick(kGpuPool, "webgl-pool");
++}
++}  // namespace
++
++
+ #include <memory>
+ #include <utility>
+ 
+@@ -3997,8 +4026,16 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+       return ScriptValue::CreateNull(script_state->GetIsolate());
+     case WebGLDebugRendererInfo::kUnmaskedRendererWebgl:
+       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
++        // clark-stealth #17: --fingerprint-gpu-renderer takes precedence.
++        std::string clark_r = base::CommandLine::ForCurrentProcess()->
++            GetSwitchValueASCII(clark::switches::kFingerprintGpuRenderer);
++        if (!clark_r.empty())
++          return WebGLAny(script_state, String(clark_r.c_str()));
++        if (base::FeatureList::IsEnabled(blink::features::kSpoofWebGLInfo))
++          return WebGLAny(script_state, String(blink::features::kSpoofWebGLRendererParam.Get()));
++        // clark-stealth #18: seed-derived GPU pool fallback.
+         return WebGLAny(script_state,
+-                        String(ContextGL()->GetString(GL_RENDERER)));
++                        String(ClarkPickGpu().renderer));
+       }
+       SynthesizeGLError(
+           GL_INVALID_ENUM, "getParameter",
+@@ -4006,8 +4043,16 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+       return ScriptValue::CreateNull(script_state->GetIsolate());
+     case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:
+       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
++        // clark-stealth #16: --fingerprint-gpu-vendor takes precedence.
++        std::string clark_v = base::CommandLine::ForCurrentProcess()->
++            GetSwitchValueASCII(clark::switches::kFingerprintGpuVendor);
++        if (!clark_v.empty())
++          return WebGLAny(script_state, String(clark_v.c_str()));
++        if (base::FeatureList::IsEnabled(blink::features::kSpoofWebGLInfo))
++          return WebGLAny(script_state, String(blink::features::kSpoofWebGLVendorParam.Get()));
++        // clark-stealth #18: seed-derived GPU pool fallback.
+         return WebGLAny(script_state,
+-                        String(ContextGL()->GetString(GL_VENDOR)));
++                        String(ClarkPickGpu().vendor));
+       }
+       SynthesizeGLError(
+           GL_INVALID_ENUM, "getParameter",
+@@ -4324,9 +4369,59 @@ WebGLRenderingContextBase::getSupportedExtensions() {
+ 
+   Vector<String> result;
+ 
++  // clark-stealth #20: filter against a "real Chrome on real GPU" allowlist
++  // when --fingerprint-gpu-renderer is set. Without the flag, return raw.
++  std::string clark_r = base::CommandLine::ForCurrentProcess()->
++      GetSwitchValueASCII(clark::switches::kFingerprintGpuRenderer);
++
++  static constexpr const char* kRealChromeExts[] = {
++      "ANGLE_instanced_arrays",
++      "EXT_blend_minmax",
++      "EXT_clip_control",
++      "EXT_color_buffer_half_float",
++      "EXT_depth_clamp",
++      "EXT_disjoint_timer_query",
++      "EXT_float_blend",
++      "EXT_frag_depth",
++      "EXT_polygon_offset_clamp",
++      "EXT_shader_texture_lod",
++      "EXT_texture_compression_bptc",
++      "EXT_texture_compression_rgtc",
++      "EXT_texture_filter_anisotropic",
++      "EXT_texture_mirror_clamp_to_edge",
++      "EXT_sRGB",
++      "KHR_parallel_shader_compile",
++      "OES_element_index_uint",
++      "OES_fbo_render_mipmap",
++      "OES_standard_derivatives",
++      "OES_texture_float",
++      "OES_texture_float_linear",
++      "OES_texture_half_float",
++      "OES_texture_half_float_linear",
++      "OES_vertex_array_object",
++      "WEBGL_blend_func_extended",
++      "WEBGL_color_buffer_float",
++      "WEBGL_compressed_texture_s3tc",
++      "WEBGL_compressed_texture_s3tc_srgb",
++      "WEBGL_debug_renderer_info",
++      "WEBGL_debug_shaders",
++      "WEBGL_depth_texture",
++      "WEBGL_draw_buffers",
++      "WEBGL_lose_context",
++      "WEBGL_multi_draw",
++      "WEBGL_polygon_mode",
++  };
++
+   for (ExtensionTracker* tracker : extensions_) {
+-    if (ExtensionSupportedAndAllowed(tracker)) {
+-      result.push_back(tracker->ExtensionName());
++    if (!ExtensionSupportedAndAllowed(tracker)) continue;
++    String name = tracker->ExtensionName();
++    if (clark_r.empty()) {
++      result.push_back(name);
++      continue;
++    }
++    // Keep only the real-Chrome-set when seeded.
++    for (const char* ok : kRealChromeExts) {
++      if (name.Utf8() == ok) { result.push_back(name); break; }
+     }
+   }
+ 
+@@ -5152,6 +5247,26 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+       return;
+     }
+     ContextGL()->ReadPixels(x, y, width, height, format, type, data);
++
++    // clark-stealth #21: per-byte ±1 noise on UNSIGNED_BYTE readbacks,
++    // deterministic by clark seed. Defeats canvas/WebGL pixel hash
++    // fingerprinting while keeping output visually identical.
++    if (clark::seed::NoiseEnabled() && type == GL_UNSIGNED_BYTE && data) {
++      uint64_t seed_h = clark::seed::Hash("webgl-rp");
++      size_t n = static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
++      // Cap the byte count to avoid pathological cases.
++      if (n > 0 && n <= 64u * 1024u * 1024u) {
++        for (size_t i = 0; i < n; ++i) {
++          uint64_t mix = seed_h ^ (static_cast<uint64_t>(i) * 0x9E3779B97F4A7C15ULL);
++          int8_t delta = static_cast<int8_t>(mix & 0x1);
++          if ((mix >> 1) & 1) {
++            data[i] = std::min<int>(255, data[i] + delta);
++          } else {
++            data[i] = std::max<int>(0, data[i] - delta);
++          }
++        }
++      }
++    }
+   }
+ }
+ 
+

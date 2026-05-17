@@ -1,0 +1,22 @@
+# clark-browser — Copyright 2026 Clark Labs Inc. — MIT
+# clark-stealth-chromium patch #48 — Permissions API default = "prompt"
+# Source: chromium 148.0.7778.96 third_party/blink/renderer/modules/permissions/permission_status.cc
+# Idea: stock Chromium returns "denied" when no listener attached.
+# Bot detectors flag the headless auto-deny; "prompt" matches a fresh
+# real Chrome.
+diff --git a/third_party/blink/renderer/modules/permissions/permission_status.cc b/third_party/blink/renderer/modules/permissions/permission_status.cc
+index 52e5091cf9..627bd59fa4 100644
+--- a/third_party/blink/renderer/modules/permissions/permission_status.cc
++++ b/third_party/blink/renderer/modules/permissions/permission_status.cc
+@@ -86,8 +86,10 @@ void PermissionStatus::ContextLifecycleStateChanged(
+ }
+ 
+ V8PermissionState PermissionStatus::state() const {
++  // clark-stealth #48: default to "prompt" instead of "denied" so bot
++  // detectors don't see the headless-mode auto-deny tell.
+   if (!listener_) {
+-    return V8PermissionState(V8PermissionState::Enum::kDenied);
++    return V8PermissionState(V8PermissionState::Enum::kPrompt);
+   }
+   return listener_->state();
+ }

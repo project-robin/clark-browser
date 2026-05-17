@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clark-browser"
+dynamic = ["version"]
+description = "Stealth Chromium for browser automation — anti-fingerprinting compiled into the binary"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Clark Labs Inc." },
+]
+maintainers = [
+    { name = "Clark Labs Inc." },
+]
+keywords = [
+    "chromium",
+    "playwright",
+    "stealth",
+    "fingerprint",
+    "anti-bot",
+    "browser-automation",
+    "headless",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "playwright>=1.40",
+    "httpx>=0.25",
+]
+
+[project.optional-dependencies]
+serve = ["aiohttp>=3.9", "websockets>=12.0"]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+clark-browser = "clarkbrowser.__main__:main"
+clarkbrowser = "clarkbrowser.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/clark-labs-inc/clark-browser"
+Documentation = "https://github.com/clark-labs-inc/clark-browser#readme"
+Repository = "https://github.com/clark-labs-inc/clark-browser"
+Issues = "https://github.com/clark-labs-inc/clark-browser/issues"
+
+[tool.setuptools]
+packages = ["clarkbrowser"]
+
+[tool.setuptools.dynamic]
+version = { attr = "clarkbrowser._version.__version__" }
