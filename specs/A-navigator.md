@@ -111,7 +111,8 @@ assert.equal(navigator.deviceMemory, 4);
 ## #09 — `navigator.userAgentData` brands & platform
 
 **File:** `components/embedder_support/user_agent_utils.cc`, function
-`GetUserAgentMetadata()`.
+`GetUserAgentMetadata()`. Implemented in
+`patches/0007-user-agent-client-hints-from-cli.patch`.
 
 **Change:** This already builds a `blink::UserAgentMetadata` struct.
 Plumb our switches into it:

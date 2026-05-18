@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Added `patches/0007-user-agent-client-hints-from-cli.patch` so
+  `navigator.userAgentData` / UA Client Hints follow
+  `--fingerprint-platform`, `--fingerprint-platform-version`,
+  `--fingerprint-brand`, and `--fingerprint-brand-version` instead of leaking
+  the host identity when `--user-agent` is set.
+- The Python launcher now passes a Chrome UA-CH brand/version and a coherent
+  platform version for the default stealth profile.
+- Fixed Linux auto-download resolution to look for the packaged
+  `headless_shell` binary after extracting the release tarball.
+- Linux release tarballs now include the headless resource packs, runtime
+  helper libraries, and a `chrome` launcher that execs `headless_shell`,
+  preserving compatibility with older wrappers.
+- The Linux Docker build runner now defaults to host memory and keeps
+  `CLARK_LINUX_BUILD_MEMORY` as an opt-in cap for constrained local builds.
+
 ## 0.2.0 — fingerprint plumbing fixes + audio noise (May 2026)
 
 Major audit pass after the 0.1.0 patches were verified end-to-end against

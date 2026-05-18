@@ -91,9 +91,9 @@ tar -xzf clark-browser-linux-x64.tar.gz
   about:blank
 ```
 
-The Linux tarball contains the `headless_shell` binary (~270 MB) plus its two
-required `.pak` resource files. The macOS arm64 build produces a normal
-`Chromium.app` bundle.
+The Linux tarball contains the `headless_shell` binary (~270 MB), a `chrome`
+compatibility launcher, headless resource packs, and runtime helper libraries.
+The macOS arm64 build produces a normal `Chromium.app` bundle.
 
 ## Stealth surface
 
@@ -134,6 +134,7 @@ Confirmed firing in CDP-driven smoke tests against the built binary
 | `navigator.plugins` | 5 PDF-viewer entries | `navigator.plugins.length === 5` |
 | `window.chrome` | always an object | `typeof window.chrome === "object"` |
 | `navigator.platform` | spoofed from `--fingerprint-platform` | returns `"Win32"` under `=windows` |
+| `navigator.userAgentData` | brand/platform/version coherent with spoofed UA | returns Windows + Google Chrome under `=windows` |
 | `navigator.hardwareConcurrency` | seed-derived from {4, 6, 8, 12, 16} | deterministic per seed |
 | `navigator.maxTouchPoints` | matched to platform | `0` on `=windows` |
 | timezone / locale | from `--fingerprint-timezone` / `--locale` | reaches Blink as set |

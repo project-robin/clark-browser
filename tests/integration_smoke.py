@@ -8,7 +8,7 @@ Usage:
 What it covers:
  1. JS-visible fingerprint vectors via CDP (navigator.platform, userAgent,
     hardwareConcurrency, maxTouchPoints, timezone, locale, languages,
-    plugins.length, window.chrome, screen.{width,height}, webdriver).
+    plugins.length, window.chrome, screen.{width,height}, webdriver, UA-CH).
  2. HTTP request-header consistency vs. the JS-visible state, by hitting
     httpbin.org/headers.
  3. Audio fingerprint differential: same DynamicsCompressor-based hash
@@ -27,9 +27,11 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Iterator
 
@@ -49,6 +51,17 @@ PORT = int(os.environ.get("CLARK_CDP_PORT", "9333"))
 PROFILE = Path("/tmp/clark-smoke-profile")
 
 
+class TrustedPageHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"<!doctype html><title>clark smoke</title>")
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+
 def cdp_eval(expr: str) -> str:
     """Run an expression via agent-browser eval, return the trailing line."""
     # NOTE: do NOT pass --session here. agent-browser's --session flag triggers
@@ -60,6 +73,20 @@ def cdp_eval(expr: str) -> str:
     if out.returncode != 0:
         return f"<error: {out.stderr.strip()[:200]}>"
     return out.stdout.strip().splitlines()[-1] if out.stdout.strip() else "<empty>"
+
+
+@contextmanager
+def trusted_local_page() -> Iterator[tuple[str, str]]:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), TrustedPageHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+    origin = f"http://{host}:{port}"
+    try:
+        yield f"{origin}/", origin
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 @contextmanager
@@ -108,6 +135,9 @@ def main() -> int:
     args = [
         f"--fingerprint={seed}",
         "--fingerprint-platform=windows",
+        "--fingerprint-platform-version=19.0.0",
+        "--fingerprint-brand=Chrome",
+        "--fingerprint-brand-version=148.0.0.0",
         "--fingerprint-hardware-concurrency=12",
         "--fingerprint-max-touch-points=0",
         '--fingerprint-gpu-vendor=Google Inc. (Intel)',
@@ -122,7 +152,8 @@ def main() -> int:
         args += ["--disable-gpu"]
 
     print("=== JS-surface vectors (with Windows fingerprint) ===")
-    with launch(*args):
+    with trusted_local_page() as (trusted_url, trusted_origin), \
+            launch(*args, f"--unsafely-treat-insecure-origin-as-secure={trusted_origin}"):
         time.sleep(0.5)
         expect("navigator.webdriver", cdp_eval("navigator.webdriver"), lambda v: v == "false", "false")
         expect("navigator.plugins.length", cdp_eval("navigator.plugins.length"), lambda v: v == "5", "5")
@@ -135,6 +166,29 @@ def main() -> int:
         expect("locale", cdp_eval("navigator.language"), lambda v: v == '"en-US"', '"en-US"')
         ua = cdp_eval("navigator.userAgent")
         expect("UA = windows", ua, lambda v: "Windows NT 10.0" in v and "HeadlessChrome" not in v, "Windows NT 10.0 (no Headless)")
+        subprocess.run([AB, "--cdp", str(PORT), "open", trusted_url],
+                       capture_output=True, timeout=30)
+        time.sleep(0.5)
+        expect("UA-CH secure context", cdp_eval("window.isSecureContext"), lambda v: v == "true", "true")
+        ua_ch = cdp_eval("""
+            (async () => {
+              if (!navigator.userAgentData) return null;
+              const high = await navigator.userAgentData.getHighEntropyValues(
+                ['platform','platformVersion','architecture','bitness','fullVersionList']);
+              return JSON.stringify({
+                platform: high.platform,
+                platformVersion: high.platformVersion,
+                architecture: high.architecture,
+                bitness: high.bitness,
+                brands: navigator.userAgentData.brands.map(b => b.brand),
+                fullBrands: (high.fullVersionList || []).map(b => b.brand),
+              });
+            })()
+        """)
+        expect("UA-CH = windows/chrome", ua_ch,
+               lambda v: "Windows" in v and "19.0.0" in v and
+                         "x86" in v and '"64"' in v and "Google Chrome" in v,
+               "Windows + Google Chrome client hints")
 
         print("\n=== HTTP UA vs JS UA consistency ===")
         # Drive a real request through the same renderer; httpbin echoes headers.

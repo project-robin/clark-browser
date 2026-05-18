@@ -55,6 +55,12 @@ PLATFORM_USER_AGENTS: dict[str, str] = {
     ),
 }
 
+PLATFORM_CLIENT_HINT_VERSIONS: dict[str, str] = {
+    "windows": "19.0.0",
+    "macos": "10.15.7",
+    "linux": "",
+}
+
 
 def get_default_stealth_args() -> list[str]:
     """Stealth flags applied automatically by launch() unless stealth_args=False.
@@ -70,15 +76,21 @@ def get_default_stealth_args() -> list[str]:
         # Linux: present as Windows for broader cluster blending.
         fp_platform = "windows"
 
-    return [
+    args = [
         "--no-sandbox",
         f"--fingerprint={seed}",
         f"--fingerprint-platform={fp_platform}",
+        f"--fingerprint-brand=Chrome",
+        f"--fingerprint-brand-version={_CHROMIUM_BROWSER_VERSION}",
         f"--user-agent={PLATFORM_USER_AGENTS[fp_platform]}",
         # macOS needs this to avoid hanging on Keychain mutex in unsigned dev builds.
         # No effect on Linux.
         "--use-mock-keychain",
     ]
+    client_hint_platform_version = PLATFORM_CLIENT_HINT_VERSIONS[fp_platform]
+    if client_hint_platform_version:
+        args.append(f"--fingerprint-platform-version={client_hint_platform_version}")
+    return args
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +138,7 @@ def get_binary_path(version: str | None = None) -> Path:
     binary_dir = get_binary_dir(version)
     if platform.system() == "Darwin":
         return binary_dir / "Chromium.app" / "Contents" / "MacOS" / "Chromium"
-    return binary_dir / "chrome"
+    return binary_dir / "headless_shell"
 
 
 def get_local_binary_override() -> str | None:

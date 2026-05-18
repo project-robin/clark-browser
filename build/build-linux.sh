@@ -97,7 +97,13 @@ fi
 if [[ ! -d build/src/chrome ]]; then
   echo "[clark-build] Cloning Chromium source (this is the 30-60 min step)..."
   mkdir -p build
-  "$PYTHON" ungoogled-chromium/utils/clone.py -p linux -o "$PWD/build/src"
+  if ! "$PYTHON" ungoogled-chromium/utils/clone.py -p linux -o "$PWD/build/src"; then
+    if [[ ! -d build/src/chrome ]]; then
+      echo "[clark-build] clone.py failed before Chromium source was available" >&2
+      exit 2
+    fi
+    echo "[clark-build] clone.py failed after source checkout; continuing to recovery sync..."
+  fi
 fi
 
 # Stage 2b: recover from a partial clone where gclient sync didn't fully
@@ -107,11 +113,13 @@ fi
 # be reachable at depth=1, which several DEPS pins aren't).
 if [[ ! -f build/src/third_party/angle/dotfile_settings.gni ]] \
    || [[ ! -f build/src/v8/gni/v8.gni ]] \
-   || [[ ! -f build/src/third_party/skia/BUILD.gn ]]; then
+   || [[ ! -f build/src/third_party/skia/BUILD.gn ]] \
+   || [[ ! -f build/src/third_party/node/node_modules/lit-html/directives/repeat.d.ts ]]; then
   echo "[clark-build] Recovering missing chromium DEPS via gclient sync..."
   # Reset main src to a clean state so gclient sync can checkout pinned commits
   # without complaining about local patch changes from a previous run.
   (cd build/src && git checkout -- . 2>/dev/null && git clean -fdx -e uc_staging -e .clark-applied -e .ungoogled-applied 2>/dev/null) || true
+  find build/src -path '*/.git/index.lock' -delete 2>/dev/null || true
   rm -f build/src/.clark-applied/* build/src/.ungoogled-applied 2>/dev/null || true
   cat > build/src/uc_staging/.gclient <<GCEOF
 solutions = [
@@ -139,10 +147,34 @@ GCEOF
   DT="$PWD/build/src/uc_staging/depot_tools"
   bash "$DT/cipd_bin_setup.sh"
   export PATH="$DT:$PATH"
+  # depot_tools' bundled gsutil path is brittle under Python 3.12 because its
+  # vendored dependency set still imports removed stdlib modules. Use the
+  # pip-packaged gsutil instead, but keep depot_tools/gclient otherwise.
+  python3 -m pip install --quiet --break-system-packages "gsutil==5.35"
+  SYSTEM_GSUTIL="$(command -v gsutil)"
+  python3 - "$DT/download_from_google_storage.py" "$SYSTEM_GSUTIL" <<'PY'
+import pathlib
+import re
+import sys
+
+path = pathlib.Path(sys.argv[1])
+system_gsutil = sys.argv[2]
+text = path.read_text()
+text = re.sub(
+    r"GSUTIL_DEFAULT_PATH = os\.path\.join\([^\n]+\n\s+'gsutil\.py'\)",
+    f"GSUTIL_DEFAULT_PATH = {system_gsutil!r}",
+    text,
+    count=1,
+)
+text = text.replace("cmd = [self.VPYTHON3, self.path]", "cmd = [self.path]")
+path.write_text(text)
+print(f"download_from_google_storage.py: GSUTIL_DEFAULT_PATH={system_gsutil}, direct_exec=True")
+PY
   # `--jobs=2` keeps us under chromium.googlesource.com's rate limit
   # (429 starts around 8+ concurrent fetches from one IP). Retry loop
   # backs off so transient 429s don't kill the build.
   for attempt in 1 2 3 4 5; do
+    find build/src -path '*/.git/index.lock' -delete 2>/dev/null || true
     if (cd build/src/uc_staging && \
          DEPOT_TOOLS_UPDATE=0 PYTHONDONTWRITEBYTECODE=1 \
          PATH="$DT:$PATH" \
@@ -481,11 +513,34 @@ ninja -C out/Default -j "$(nproc)" headless_shell
 # Stage 7: package --------------------------------------------------------------
 echo "[clark-build] Packaging..."
 cd out/Default
-tar -czf "$OUT/clark-browser-linux-x64.tar.gz" \
-  headless_shell \
-  headless_lib_data.pak headless_lib_strings.pak \
-  v8_context_snapshot.bin snapshot_blob.bin icudtl.dat \
-  locales || true
+cat > chrome <<'SHEOF'
+#!/bin/sh
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$HERE/headless_shell" "$@"
+SHEOF
+chmod +x chrome
+PACKAGE_FILES=(
+  chrome
+  headless_shell
+  headless_command_resources.pak
+  headless_lib_data.pak
+  headless_lib_strings.pak
+)
+for optional in \
+  libEGL.so \
+  libGLESv2.so \
+  libvulkan.so.1 \
+  libvk_swiftshader.so \
+  vk_swiftshader_icd.json \
+  v8_context_snapshot.bin \
+  snapshot_blob.bin \
+  icudtl.dat \
+  locales; do
+  if [[ -e "$optional" ]]; then
+    PACKAGE_FILES+=("$optional")
+  fi
+done
+tar -czf "$OUT/clark-browser-linux-x64.tar.gz" "${PACKAGE_FILES[@]}"
 echo "[clark-build] Done. Artifact: $OUT/clark-browser-linux-x64.tar.gz"
 ls -lh "$OUT/clark-browser-linux-x64.tar.gz"
 

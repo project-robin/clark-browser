@@ -16,7 +16,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # it was removed from Python 3.12 and is no longer a separate package.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git python3 python3-pip python3-venv \
-    python3-httplib2 lsb-release \
+    python3-httplib2 python3-six lsb-release \
     ninja-build generate-ninja clang lld llvm \
     build-essential pkg-config libgbm-dev \
     libnss3-dev \

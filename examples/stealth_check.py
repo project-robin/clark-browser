@@ -37,6 +37,23 @@ CHECKS = {
         })()
     """,
     "Intl timezone": "Intl.DateTimeFormat().resolvedOptions().timeZone",
+    "UA Client Hints": """
+        (async () => {
+            if (!navigator.userAgentData) return null;
+            const high = await navigator.userAgentData.getHighEntropyValues([
+                'platform', 'platformVersion', 'architecture', 'bitness',
+                'fullVersionList'
+            ]);
+            return {
+                brands: navigator.userAgentData.brands,
+                platform: high.platform,
+                platformVersion: high.platformVersion,
+                architecture: high.architecture,
+                bitness: high.bitness,
+                fullVersionList: high.fullVersionList,
+            };
+        })()
+    """,
 }
 
 

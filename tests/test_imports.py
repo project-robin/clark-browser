@@ -16,6 +16,13 @@ def test_default_args_have_fingerprint() -> None:
     assert any(a.startswith("--fingerprint=") for a in args)
 
 
+def test_default_args_have_client_hint_identity() -> None:
+    from clarkbrowser import get_default_stealth_args
+    args = get_default_stealth_args()
+    assert "--fingerprint-brand=Chrome" in args
+    assert any(a.startswith("--fingerprint-brand-version=") for a in args)
+
+
 def test_version() -> None:
     from clarkbrowser import __version__
     assert isinstance(__version__, str)
@@ -26,3 +33,10 @@ def test_chromium_version() -> None:
     from clarkbrowser import get_chromium_version
     v = get_chromium_version()
     assert v.count(".") == 3  # major.minor.build.patch
+
+
+def test_linux_binary_path_matches_tarball(monkeypatch) -> None:
+    from clarkbrowser import config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(config.platform, "machine", lambda: "x86_64")
+    assert config.get_binary_path().name == "headless_shell"

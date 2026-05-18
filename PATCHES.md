@@ -8,18 +8,18 @@ repo as actual code vs spec-only.
 | # range | File |
 |---|---|
 | Shared infrastructure | `patches/000-shared/` (real C++ files) |
-| #01-#10 Navigator / JS-surface | `patches/A-navigator.md` |
-| #11-#15 Screen / window | `patches/B-screen.md` |
-| #16-#21 WebGL | `patches/C-webgl.md` + `data/gpu_pool.json` |
-| #22-#25 Canvas / clientRects | `patches/D-canvas-rects.md` + `specs/22-canvas-noise.md` |
-| #26-#28 Audio | `patches/E-audio.md` |
-| #29-#31 Fonts | `patches/F-fonts.md` |
-| #32-#35 Time / locale | `patches/G-time-locale.md` |
-| #36-#37 Storage | `patches/H-storage.md` |
-| #38-#39 WebRTC | `patches/I-webrtc.md` |
-| #40-#44 TLS / HTTP | `patches/J-tls-http.md` + `specs/40-tls-fingerprint.md` |
-| #45-#48 Headless / automation | `patches/K-headless.md` |
-| #49 WebGPU | `patches/L-webgpu.md` |
+| #01-#10 Navigator / JS-surface | `specs/A-navigator.md` |
+| #11-#15 Screen / window | `specs/B-screen.md` |
+| #16-#21 WebGL | `specs/C-webgl.md` + `data/gpu_pool.json` |
+| #22-#25 Canvas / clientRects | `specs/D-canvas-rects.md` + `specs/22-canvas-noise.md` |
+| #26-#28 Audio | `specs/E-audio.md` |
+| #29-#31 Fonts | `specs/F-fonts.md` |
+| #32-#35 Time / locale | `specs/G-time-locale.md` |
+| #36-#37 Storage | `specs/H-storage.md` |
+| #38-#39 WebRTC | `specs/I-webrtc.md` |
+| #40-#44 TLS / HTTP | `specs/J-tls-http.md` + `specs/40-tls-fingerprint.md` |
+| #45-#48 Headless / automation | `specs/K-headless.md` |
+| #49 WebGPU | `specs/L-webgpu.md` |
 | #18 GPU pool (largest single patch) | `specs/18-webgl-gpu-pool.md` |
 | #03 plugin spec | `specs/03-plugins.md` |
 
@@ -41,11 +41,11 @@ Legend:
 | 02 | `window.chrome` always-bound (even in headless) | Chromium upstream code | 🟢 | `patches/0002-...` |
 | 03 | `navigator.plugins` → realistic 5-plugin list | upstream `PluginData` | 🟡 | `patches/0003-...` |
 | 04 | `navigator.mimeTypes` consistent with #03 | derived from #03 | 🟡 | spec |
-| 05 | `navigator.languages` from `--lang` | upstream existing infra | 🟢 | `patches/0005-...` |
-| 06 | `navigator.platform` from `--fingerprint-platform` | well-known UA story | 🟡 | spec |
-| 07 | `navigator.hardwareConcurrency` from CLI | Chromium has `Emulation.set...Override` we adapt | 🟡 | `patches/0007-...` |
-| 08 | `navigator.deviceMemory` from CLI | Web Platform Device Memory API | 🟡 | spec |
-| 09 | `navigator.userAgentData` brands from CLI | Sec-CH-UA spec, upstream `embedder_support` | 🟡 | spec |
+| 05 | `navigator.languages` from `--fingerprint-locale` | upstream existing infra | 🟢 | `patches/0005-...` |
+| 06 | `navigator.platform` from `--fingerprint-platform` | well-known UA story | 🟡 | `patches/0006-...` |
+| 07 | `navigator.hardwareConcurrency` from CLI | Chromium has `Emulation.set...Override` we adapt | 🟡 | `patches/0006-...` |
+| 08 | `navigator.deviceMemory` from CLI | Web Platform Device Memory API | 🟡 | `patches/0008-...` |
+| 09 | `navigator.userAgentData` brands/platform from CLI | Sec-CH-UA spec, upstream `embedder_support` | 🟡 | `patches/0007-...` |
 | 10 | `Notification.permission` not 'denied' under automation | MDN | 🟢 | spec |
 
 ## B. Screen / Window / DPR (Moderate, all fresh)
