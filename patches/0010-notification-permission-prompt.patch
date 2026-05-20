@@ -1,30 +1,31 @@
-# clark-browser — Copyright 2026 Clark Labs Inc. — MIT
-# clark-stealth-chromium patch 0010 — Notification permission consistency
+# clark-browser - Copyright 2026 Clark Labs Inc. - MIT
+# clark-stealth-chromium patch #10 - Notification.permission defaults to
+# "default" under Clark fingerprint mode.
 #
-# Source verified against:
-#   chromium/main third_party/blink/renderer/modules/permissions/permission_status.cc
-#   May 2026
-#
-# Idea source: Real Chrome reports `Notification.permission === "default"`
-# until the user grants or denies. Headless mode auto-returns "denied"
-# for many permissions, which bot detectors flag.
-#
-# Approach: SPEC — the actual default-denial happens in the browser-side
-# PermissionContextBase / NotificationPermissionContext, not the renderer
-# side. Need to confirm whether to patch at renderer-side
-# PermissionStatus::Query or browser-side context. Verify with a
-# stock-build run first.
-#
-# Test: launch headless, evaluate
-#   navigator.permissions.query({name:'notifications'}).then(p => p.state)
-# Expected: "prompt" or "granted" (NOT "denied").
-#
-# Depends on: 000-shared (probably), more discovery needed.
---- SPEC ---
-File: chrome/browser/notifications/notification_permission_context.cc
-      and/or  content/browser/permissions/permission_controller_impl.cc
-
-The fix is upstream policy: when launched in headless mode AND no policy
-has explicitly set notification permission, default to PROMPT not
-DENIED. We don't introduce a new flag — we just stop the auto-deny that
-headless does today.
+# Source: chromium 148.0.7778.96
+#   third_party/blink/renderer/modules/notifications/notification.cc
+diff --git a/third_party/blink/renderer/modules/notifications/notification.cc b/third_party/blink/renderer/modules/notifications/notification.cc
+--- a/third_party/blink/renderer/modules/notifications/notification.cc
++++ b/third_party/blink/renderer/modules/notifications/notification.cc
+@@ -32,0 +33 @@
++#include "base/command_line.h"
+@@ -36,0 +38 @@
++#include "chrome/common/clark_fingerprint_switches.h"
+@@ -68,0 +71,12 @@
++namespace {
++
++bool ClarkNotificationPromptDefaultEnabled() {
++  auto* cl = base::CommandLine::ForCurrentProcess();
++  return cl->HasSwitch(clark::switches::kFingerprint) ||
++         cl->HasSwitch(clark::switches::kFingerprintPlatform) ||
++         cl->HasSwitch(clark::switches::kFingerprintBrand) ||
++         cl->HasSwitch(clark::switches::kFingerprintBrandVersion);
++}
++
++}  // namespace
++
+@@ -437,0 +452,4 @@
++  if (status == mojom::blink::PermissionStatus::DENIED &&
++      ClarkNotificationPromptDefaultEnabled()) {
++    status = mojom::blink::PermissionStatus::ASK;
++  }

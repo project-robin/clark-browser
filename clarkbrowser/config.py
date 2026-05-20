@@ -83,6 +83,11 @@ def get_default_stealth_args() -> list[str]:
         f"--fingerprint-brand=Chrome",
         f"--fingerprint-brand-version={_CHROMIUM_BROWSER_VERSION}",
         f"--user-agent={PLATFORM_USER_AGENTS[fp_platform]}",
+        # Ungoogled runtime noise switches are intentionally opt-in upstream;
+        # Clark enables them by default and patch #50 forwards them to renderers.
+        "--fingerprinting-client-rects-noise",
+        "--fingerprinting-canvas-measuretext-noise",
+        "--fingerprinting-canvas-image-data-noise",
         # macOS needs this to avoid hanging on Keychain mutex in unsigned dev builds.
         # No effect on Linux.
         "--use-mock-keychain",

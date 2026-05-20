@@ -43,12 +43,15 @@ CMD=(docker run --name "$CONTAINER_NAME"
 if [[ -n "$MEMORY_LIMIT" ]]; then
   CMD+=(--memory="$MEMORY_LIMIT")
 fi
+if [[ "$MODE" == "background" ]]; then
+  CMD+=(-d)
+fi
 CMD+=(--cpus="$CPU_COUNT" "$IMAGE" bash /usr/local/bin/build-linux.sh)
 
 if [[ "$MODE" == "background" ]]; then
   echo "[run-linux-build] Starting container in background. Tail logs with:"
   echo "  docker logs -f $CONTAINER_NAME"
-  exec "${CMD[@]}" -d >/dev/null
+  exec "${CMD[@]}" >/dev/null
 else
   exec "${CMD[@]}"
 fi

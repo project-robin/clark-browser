@@ -169,6 +169,13 @@ def expect(label: str, actual: str, predicate, expected_desc: str) -> None:
         failures.append(f"{label}: got {actual!r}, expected {expected_desc}")
 
 
+def json_ok(actual: str, predicate) -> bool:
+    try:
+        return bool(predicate(json.loads(actual)))
+    except Exception:
+        return False
+
+
 def main() -> int:
     seed = "42069"
     args = [
@@ -181,6 +188,9 @@ def main() -> int:
         "--fingerprint-max-touch-points=0",
         "--fingerprint-timezone=America/New_York",
         "--fingerprint-locale=en-US",
+        "--fingerprinting-client-rects-noise",
+        "--fingerprinting-canvas-measuretext-noise",
+        "--fingerprinting-canvas-image-data-noise",
         "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     ]
 
@@ -194,6 +204,32 @@ def main() -> int:
         expect("navigator.platform", cdp_eval("navigator.platform"), lambda v: v == '"Win32"', '"Win32"')
         expect("hardwareConcurrency", cdp_eval("navigator.hardwareConcurrency"), lambda v: v == "12", "12")
         expect("maxTouchPoints", cdp_eval("navigator.maxTouchPoints"), lambda v: v == "0", "0")
+        screen_state = cdp_eval("""
+            ({
+              width: screen.width,
+              height: screen.height,
+              availWidth: screen.availWidth,
+              availHeight: screen.availHeight,
+              colorDepth: screen.colorDepth,
+              pixelDepth: screen.pixelDepth,
+              outerWidth: window.outerWidth,
+              outerHeight: window.outerHeight,
+              devicePixelRatio: window.devicePixelRatio,
+            })
+        """)
+        expect("screen/window coherent", screen_state,
+               lambda v: json_ok(v, lambda s:
+                   isinstance(s, dict) and
+                   s.get("width", 0) > 0 and
+                   s.get("height", 0) > 0 and
+                   s.get("availWidth") == s.get("width") and
+                   0 <= s.get("height", 0) - s.get("availHeight", 0) <= 200 and
+                   s.get("outerWidth") == s.get("width") and
+                   s.get("outerHeight") == s.get("availHeight") and
+                   s.get("colorDepth") == 24 and
+                   s.get("pixelDepth") == 24 and
+                   s.get("devicePixelRatio") == 1),
+               "positive desktop screen, matching outer size, 24-bit depth, DPR 1")
         expect("timezone", cdp_eval("Intl.DateTimeFormat().resolvedOptions().timeZone"),
                lambda v: v == '"America/New_York"', '"America/New_York"')
         expect("locale", cdp_eval("navigator.language"), lambda v: v == '"en-US"', '"en-US"')

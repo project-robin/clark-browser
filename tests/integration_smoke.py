@@ -29,6 +29,7 @@ import subprocess
 import sys
 import threading
 import time
+from urllib.parse import quote
 import urllib.request
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -130,6 +131,20 @@ def expect(label: str, actual: str, predicate, expected_desc: str) -> None:
         failures.append(f"{label}: got {actual!r}, expected {expected_desc}")
 
 
+def json_ok(actual: str, predicate) -> bool:
+    try:
+        parsed = json.loads(actual)
+        if isinstance(parsed, str):
+            parsed = json.loads(parsed)
+        return bool(predicate(parsed))
+    except Exception:
+        return False
+
+
+def data_html_url(html: str) -> str:
+    return "data:text/html;charset=utf-8," + quote(html, safe="")
+
+
 def main() -> int:
     seed = "42069"
     args = [
@@ -140,10 +155,11 @@ def main() -> int:
         "--fingerprint-brand-version=148.0.0.0",
         "--fingerprint-hardware-concurrency=12",
         "--fingerprint-max-touch-points=0",
-        '--fingerprint-gpu-vendor=Google Inc. (Intel)',
-        '--fingerprint-gpu-renderer=ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)',
         "--fingerprint-timezone=America/New_York",
         "--fingerprint-locale=en-US",
+        "--fingerprinting-client-rects-noise",
+        "--fingerprinting-canvas-measuretext-noise",
+        "--fingerprinting-canvas-image-data-noise",
         "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     ]
     if "--webgl" in sys.argv:
@@ -161,6 +177,32 @@ def main() -> int:
         expect("navigator.platform", cdp_eval("navigator.platform"), lambda v: v == '"Win32"', '"Win32"')
         expect("hardwareConcurrency", cdp_eval("navigator.hardwareConcurrency"), lambda v: v == "12", "12")
         expect("maxTouchPoints", cdp_eval("navigator.maxTouchPoints"), lambda v: v == "0", "0")
+        screen_state = cdp_eval("""
+            JSON.stringify({
+              width: screen.width,
+              height: screen.height,
+              availWidth: screen.availWidth,
+              availHeight: screen.availHeight,
+              colorDepth: screen.colorDepth,
+              pixelDepth: screen.pixelDepth,
+              outerWidth: window.outerWidth,
+              outerHeight: window.outerHeight,
+              devicePixelRatio: window.devicePixelRatio,
+            })
+        """)
+        expect("screen/window coherent", screen_state,
+               lambda v: json_ok(v, lambda s:
+                   isinstance(s, dict) and
+                   s.get("width", 0) > 0 and
+                   s.get("height", 0) > 0 and
+                   s.get("availWidth") == s.get("width") and
+                   0 <= s.get("height", 0) - s.get("availHeight", 0) <= 200 and
+                   s.get("outerWidth") == s.get("width") and
+                   s.get("outerHeight") == s.get("availHeight") and
+                   s.get("colorDepth") == 24 and
+                   s.get("pixelDepth") == 24 and
+                   s.get("devicePixelRatio") == 1),
+               "positive desktop screen, matching outer size, 24-bit depth, DPR 1")
         expect("timezone", cdp_eval("Intl.DateTimeFormat().resolvedOptions().timeZone"),
                lambda v: v == '"America/New_York"', '"America/New_York"')
         expect("locale", cdp_eval("navigator.language"), lambda v: v == '"en-US"', '"en-US"')
@@ -186,9 +228,46 @@ def main() -> int:
             })()
         """)
         expect("UA-CH = windows/chrome", ua_ch,
-               lambda v: "Windows" in v and "19.0.0" in v and
-                         "x86" in v and '"64"' in v and "Google Chrome" in v,
+               lambda v: json_ok(v, lambda high:
+                   isinstance(high, dict) and
+                   high.get("platform") == "Windows" and
+                   high.get("platformVersion") == "19.0.0" and
+                   high.get("architecture") == "x86" and
+                   high.get("bitness") == "64" and
+                   "Google Chrome" in high.get("brands", []) and
+                   "Google Chrome" in high.get("fullBrands", [])),
                "Windows + Google Chrome client hints")
+
+        if "--webgl" in sys.argv:
+            webgl = cdp_eval("""
+                JSON.stringify((() => {
+                  const canvas = document.createElement('canvas');
+                  const gl = canvas.getContext('webgl') ||
+                      canvas.getContext('experimental-webgl');
+                  if (!gl) return {supported: false};
+                  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+                  return {
+                    supported: true,
+                    vendor: ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : null,
+                    renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : null,
+                    version: gl.getParameter(gl.VERSION),
+                    shading: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+                    extensions: gl.getSupportedExtensions() || [],
+                  };
+                })())
+            """)
+            expect("WebGL seed fallback = Windows ANGLE", webgl,
+                   lambda v: json_ok(v, lambda g:
+                       isinstance(g, dict) and
+                       g.get("supported") is True and
+                       "Google Inc." in str(g.get("vendor")) and
+                       "ANGLE (" in str(g.get("renderer")) and
+                       "Direct3D11" in str(g.get("renderer")) and
+                       "SwiftShader" not in str(g.get("renderer")) and
+                       "llvmpipe" not in str(g.get("renderer")) and
+                       "Chromium" in str(g.get("version")) and
+                       "WEBGL_debug_renderer_info" in g.get("extensions", [])),
+                   "seeded Windows ANGLE tuple, not SwiftShader/llvmpipe")
 
         print("\n=== HTTP UA vs JS UA consistency ===")
         # Drive a real request through the same renderer; httpbin echoes headers.
@@ -211,12 +290,18 @@ def main() -> int:
         """)
         expect("bot.sannysoft WebDriver missing", rows, lambda v: "missing (passed)" in v, "missing (passed)")
         expect("bot.sannysoft Chrome present", rows, lambda v: "present (passed)" in v, "present (passed)")
-        expect("bot.sannysoft no Headless", rows, lambda v: "HEADCHR" in v and "fail" not in v.lower(),
-               "no HEADCHR fail")
+        expect("bot.sannysoft no Headless", rows,
+               lambda v: "HEADCHR_UA | ok" in v and
+                         "HEADCHR_CHROME_OBJ | ok" in v and
+                         "HeadlessChrome" not in v,
+               "HEADCHR_UA/HEADCHR_CHROME_OBJ ok, no HeadlessChrome")
+        expect("bot.sannysoft notification permission", rows,
+               lambda v: "HEADCHR_PERMISSIONS | ok" in v,
+               "HEADCHR_PERMISSIONS ok")
 
     # Audio + canvas differential across two seeds — separate launches.
     print("\n=== Audio fingerprint differential (seed 1 vs 42069) ===")
-    audio_html = "data:text/html,<script>(async()=>{const oc=new OfflineAudioContext(1,5000,44100);const o=oc.createOscillator();o.type='triangle';o.frequency.value=10000;const c=oc.createDynamicsCompressor();c.threshold.value=-50;c.knee.value=40;c.ratio.value=12;c.attack.value=0;c.release.value=0.25;o.connect(c);c.connect(oc.destination);o.start(0);const b=await oc.startRendering();const d=b.getChannelData(0);let s=0;for(let i=0;i<d.length;i++)s+=Math.abs(d[i]);document.title='audio='+s.toFixed(15)})()</script>"
+    audio_html = data_html_url("<script>(async()=>{const oc=new OfflineAudioContext(1,5000,44100);const o=oc.createOscillator();o.type='triangle';o.frequency.value=10000;const c=oc.createDynamicsCompressor();c.threshold.value=-50;c.knee.value=40;c.ratio.value=12;c.attack.value=0;c.release.value=0.25;o.connect(c);c.connect(oc.destination);o.start(0);const b=await oc.startRendering();const d=b.getChannelData(0);let s=0;for(let i=0;i<d.length;i++)s+=Math.abs(d[i]);document.title='audio='+s.toFixed(15)})()</script>")
     seeds = []
     for s in ("1", "42069"):
         with launch("--disable-gpu", f"--fingerprint={s}", "--fingerprint-platform=windows"):
@@ -228,6 +313,36 @@ def main() -> int:
             seeds.append(t)
             print(f"  seed={s} {t}")
     expect("audio FP differs across seeds", str(seeds), lambda v: seeds[0] != seeds[1], "two distinct values")
+
+    print("\n=== Canvas fingerprint differential (seed 1 vs 42069) ===")
+    canvas_html = data_html_url(
+        "<canvas id=c width=240 height=80></canvas><script>"
+        "const c=document.getElementById('c');const x=c.getContext('2d');"
+        "x.textBaseline='top';x.font='17px Arial';x.fillStyle='#f60';"
+        "x.fillRect(0,0,240,80);x.fillStyle='#069';"
+        "x.fillText('Clark canvas smoke 123',4,17);"
+        "const d=c.toDataURL();let h=2166136261;"
+        "for(let i=0;i<d.length;i++){h^=d.charCodeAt(i);h=Math.imul(h,16777619);}"
+        "document.title='canvas='+(h>>>0).toString(16)</script>"
+    )
+    canvas_seeds = []
+    for s in ("1", "42069"):
+        with launch(
+            "--disable-gpu",
+            f"--fingerprint={s}",
+            "--fingerprint-platform=windows",
+            "--fingerprinting-canvas-measuretext-noise",
+            "--fingerprinting-canvas-image-data-noise",
+        ):
+            time.sleep(0.5)
+            subprocess.run([AB, "--cdp", str(PORT), "open", canvas_html],
+                           capture_output=True, timeout=30)
+            time.sleep(1)
+            t = cdp_eval("document.title")
+            canvas_seeds.append(t)
+            print(f"  seed={s} {t}")
+    expect("canvas FP differs across seeds", str(canvas_seeds),
+           lambda v: canvas_seeds[0] != canvas_seeds[1], "two distinct values")
 
     if failures:
         print(f"\n{len(failures)} failures:")
