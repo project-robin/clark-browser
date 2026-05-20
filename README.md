@@ -144,6 +144,25 @@ Confirmed firing in CDP-driven smoke tests against the built binary
 See [`PATCHES.md`](./PATCHES.md) for the full patch catalog and `specs/` for
 per-category implementation notes.
 
+## Live detector results
+
+Release
+[`chromium-v148.0.7778.96-stealth1`](https://github.com/clark-labs-inc/clark-browser/releases/tag/chromium-v148.0.7778.96-stealth1)
+was tested on 2026-05-20 inside an E2B Ubuntu 24.04 sandbox with the real
+`agent-browser 0.27.0` CLI driving the released Linux binary.
+
+| Target | Result | Evidence |
+|---|---:|---|
+| Cloudflare challenge smoke (`nowsecure.nl`) | PASS | Loaded target without visible challenge/block text |
+| SannySoft | PASS | WebDriver missing, Chrome present, HEADCHR UA/permissions/plugins/iframe all `ok` |
+| Antoine Vastel headless test | FAIL | Explicit verdict: `You are Chrome headless` |
+| BrowserLeaks Client Hints | PASS | Windows + Google Chrome UA-CH, no `HeadlessChrome` |
+| BrowserLeaks WebGL | PASS | Google/NVIDIA ANGLE, WebGL/WebGL2 enabled, no SwiftShader/llvmpipe text |
+| Incolumitas, Pixelscan, BotD demo, CreepJS | OBSERVED | Loaded and captured; no stable passive verdict for several pages; CreepJS still shows a Headless panel |
+
+Full table and raw captured output:
+[`docs/bot-detection-results.md`](./docs/bot-detection-results.md).
+
 ## Methodology
 
 We build on ungoogled-chromium (BSD-3) and inherit its existing Brave-derived
