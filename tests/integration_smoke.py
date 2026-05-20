@@ -157,6 +157,7 @@ def main() -> int:
         "--fingerprint-max-touch-points=0",
         "--fingerprint-timezone=America/New_York",
         "--fingerprint-locale=en-US",
+        "--accept-lang=en-US,en",
         "--fingerprinting-client-rects-noise",
         "--fingerprinting-canvas-measuretext-noise",
         "--fingerprinting-canvas-image-data-noise",
@@ -298,6 +299,16 @@ def main() -> int:
         expect("bot.sannysoft notification permission", rows,
                lambda v: "HEADCHR_PERMISSIONS | ok" in v,
                "HEADCHR_PERMISSIONS ok")
+
+        print("\n=== Antoine Vastel headless check ===")
+        subprocess.run([AB, "--cdp", str(PORT), "open",
+                        "https://arh.antoinevastel.com/bots/areyouheadless"],
+                       capture_output=True, timeout=30)
+        time.sleep(6)
+        vastel = cdp_eval("document.body.innerText")
+        expect("antoinevastel not Chrome headless", vastel,
+               lambda v: "You are not Chrome headless" in v,
+               "You are not Chrome headless")
 
     # Audio + canvas differential across two seeds — separate launches.
     print("\n=== Audio fingerprint differential (seed 1 vs 42069) ===")

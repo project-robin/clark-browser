@@ -188,6 +188,7 @@ def main() -> int:
         "--fingerprint-max-touch-points=0",
         "--fingerprint-timezone=America/New_York",
         "--fingerprint-locale=en-US",
+        "--accept-lang=en-US,en",
         "--fingerprinting-client-rects-noise",
         "--fingerprinting-canvas-measuretext-noise",
         "--fingerprinting-canvas-image-data-noise",

@@ -88,6 +88,8 @@ tar -xzf clark-browser-linux-x64.tar.gz
   --remote-allow-origins=* \
   --fingerprint=12345 \
   --fingerprint-platform=windows \
+  --fingerprint-locale=en-US \
+  --accept-lang=en-US,en \
   about:blank
 ```
 
@@ -155,7 +157,7 @@ was tested on 2026-05-20 inside an E2B Ubuntu 24.04 sandbox with the real
 |---|---:|---|
 | Cloudflare challenge smoke (`nowsecure.nl`) | PASS | Loaded target without visible challenge/block text |
 | SannySoft | PASS | WebDriver missing, Chrome present, HEADCHR UA/permissions/plugins/iframe all `ok` |
-| Antoine Vastel headless test | FAIL | Explicit verdict: `You are Chrome headless` |
+| Antoine Vastel headless test | PASS with `--accept-lang=en-US,en` | The same released binary failed without an HTTP `Accept-Language` header and passed with one |
 | BrowserLeaks Client Hints | PASS | Windows + Google Chrome UA-CH, no `HeadlessChrome` |
 | BrowserLeaks WebGL | PASS | Google/NVIDIA ANGLE, WebGL/WebGL2 enabled, no SwiftShader/llvmpipe text |
 | Incolumitas, Pixelscan, BotD demo, CreepJS | OBSERVED | Loaded and captured; no stable passive verdict for several pages; CreepJS still shows a Headless panel |

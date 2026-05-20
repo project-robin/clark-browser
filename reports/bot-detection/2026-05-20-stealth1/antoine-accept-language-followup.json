@@ -1,0 +1,26 @@
+{
+  "run": {
+    "timestamp_utc": "2026-05-20T08:05:00Z",
+    "environment": "E2B Ubuntu 24.04 sandbox",
+    "agent_browser": "agent-browser 0.27.0",
+    "sandbox_id": "iv289gm93f0dpja2hlffg",
+    "release_url": "https://github.com/clark-labs-inc/clark-browser/releases/download/chromium-v148.0.7778.96-stealth1/clark-browser-linux-x64.tar.gz",
+    "sha256": "902934003d3183dc13fd254ef14d9286a8b47396414e9f851801479c3b3fb4a9",
+    "target": "https://arh.antoinevastel.com/bots/areyouheadless"
+  },
+  "results": [
+    {
+      "label": "without_accept_lang",
+      "extra_args": [],
+      "verdict_text": "You are Chrome headless"
+    },
+    {
+      "label": "with_accept_lang",
+      "extra_args": [
+        "--accept-lang=en-US,en"
+      ],
+      "verdict_text": "You are not Chrome headless"
+    }
+  ],
+  "conclusion": "The Antoine Vastel endpoint classifies a Chrome-looking request as headless when the HTTP Accept-Language header is absent. The released binary passes the endpoint when launched with --accept-lang=en-US,en."
+}

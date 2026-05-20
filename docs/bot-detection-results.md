@@ -18,7 +18,7 @@ launched as patched `headless_shell`, and driven through the real
 | Baseline JS/CDP probe | PASS | `navigator.webdriver=false`, `plugins.length=5`, `platform=Win32`, coherent `1440x900` screen, WebGL `Google Inc. (NVIDIA)` / `ANGLE (...) Direct3D11`; `permissions.query({name:"notifications"})` returned `prompt`. |
 | [Cloudflare challenge smoke](https://nowsecure.nl/) | PASS | Loaded `nowsecure.nl` without visible Cloudflare challenge/block text. |
 | [SannySoft bot detector](https://bot.sannysoft.com/) | PASS | WebDriver missing, WebDriver Advanced passed, Chrome present, `HEADCHR_UA`, `HEADCHR_CHROME_OBJ`, `HEADCHR_PERMISSIONS`, `HEADCHR_PLUGINS`, and `HEADCHR_IFRAME` all `ok`. |
-| [Antoine Vastel headless test](https://arh.antoinevastel.com/bots/areyouheadless) | FAIL | Explicit verdict text: `You are Chrome headless`. |
+| [Antoine Vastel headless test](https://arh.antoinevastel.com/bots/areyouheadless) | PASS with `--accept-lang=en-US,en` | Follow-up E2B run used the same released binary and real `agent-browser`; without `--accept-lang` the page returned `You are Chrome headless`, with `--accept-lang=en-US,en` it returned `You are not Chrome headless`. |
 | [Incolumitas bot detector](https://bot.incolumitas.com/) | OBSERVED | Page loaded and standard Intoli-style JSON showed `userAgent`, `webDriver`, and `pluginsLength` as `OK`; no stable behavioral score was parsed. `connectionRTT` reported `FAIL`. |
 | [Fingerprint Bot Demo](https://botd-demo.fpjs.sh/) | OBSERVED | Demo loaded, but it is an interactive Browserless code runner and did not expose a passive not-bot verdict. |
 | [BrowserLeaks Client Hints](https://browserleaks.com/client-hints) | PASS | Windows platform/version, Chromium/Google Chrome brands, and no `HeadlessChrome` in the captured page text. |
@@ -34,7 +34,10 @@ current E2B + `agent-browser` path: webdriver, plugins, Chrome object,
 permissions, UA/UA-CH, screen metrics, and WebGL all stayed coherent in live
 public pages.
 
-The remaining concrete gap is Antoine Vastel's headless test, which still
-returns `You are Chrome headless`. CreepJS also keeps a Headless panel visible,
-though its captured percentages did not classify the run as fully headless.
-Those two rows should be treated as the next browser-source stealth backlog.
+The Antoine Vastel failure was traced to the HTTP `Accept-Language` request
+header, not to a JavaScript-only surface. A Chrome-looking request without
+`Accept-Language` is classified as headless by that endpoint; adding
+`--accept-lang=en-US,en` makes the same released binary return
+`You are not Chrome headless`. CreepJS still keeps a Headless panel visible,
+though its captured percentages did not classify the run as fully headless, so
+that remains the next browser-source stealth backlog.
