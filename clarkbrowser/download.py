@@ -31,6 +31,7 @@ from .config import (
     get_download_url,
     get_local_binary_override,
     get_platform_tag,
+    get_release_tag,
 )
 
 logger = logging.getLogger("clarkbrowser")
@@ -183,6 +184,7 @@ def binary_info() -> dict:
     return {
         "wrapper_version": _wrapper_version,
         "chromium_version": get_chromium_version(),
+        "release_tag": get_release_tag(),
         "platform": get_platform_tag(),
         "binary_path": str(get_binary_path()),
         "installed": get_binary_path().exists(),

@@ -116,9 +116,11 @@ diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_ba
 @@ -3983,0 +4085,2 @@
 +      if (ClarkHasFingerprint())
 +        return WebGLAny(script_state, String(ClarkPickGpu().gl_version));
-@@ -3998,18 +4100,48 @@
+@@ -3998,22 +4100,48 @@
 -    case WebGLDebugRendererInfo::kUnmaskedRendererWebgl:
 -      if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
+-        if (base::FeatureList::IsEnabled(blink::features::kSpoofWebGLInfo))
+-          return WebGLAny(script_state, String(blink::features::kSpoofWebGLRendererParam.Get()));
 -        return WebGLAny(script_state,
 -                        String(ContextGL()->GetString(GL_RENDERER)));
 -      }
@@ -128,6 +130,8 @@ diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_ba
 -      return ScriptValue::CreateNull(script_state->GetIsolate());
 -    case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:
 -      if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
+-        if (base::FeatureList::IsEnabled(blink::features::kSpoofWebGLInfo))
+-          return WebGLAny(script_state, String(blink::features::kSpoofWebGLVendorParam.Get()));
 -        return WebGLAny(script_state,
 -                        String(ContextGL()->GetString(GL_VENDOR)));
 -      }
@@ -183,8 +187,7 @@ diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_ba
 +          "invalid parameter name, WEBGL_debug_renderer_info not enabled");
 +      return ScriptValue::CreateNull(script_state->GetIsolate());
 +    }
-@@ -4323,0 +4457,39 @@
-+  const bool clark_fingerprint = ClarkHasFingerprint();
+@@ -4323,0 +4457,38 @@
 +  static constexpr const char* kRealChromeExts[] = {
 +      "ANGLE_instanced_arrays",
 +      "EXT_blend_minmax",
@@ -223,6 +226,12 @@ diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_ba
 +      "WEBGL_polygon_mode",
 +  };
 +
+@@ -4325,3 +4499,4 @@ WebGLRenderingContextBase::getSupportedExtensions() {
+   Vector<String> result;
+-
++  const bool clark_fingerprint = ClarkHasFingerprint();
++
+   for (ExtensionTracker* tracker : extensions_) {
 @@ -4328,3 +4501,16 @@
 -    if (ExtensionSupportedAndAllowed(tracker)) {
 -      result.push_back(tracker->ExtensionName());

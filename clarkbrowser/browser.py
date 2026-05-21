@@ -9,10 +9,32 @@ from __future__ import annotations
 
 import logging
 import os
+import platform as host_platform
 from typing import Any, Literal, TypedDict
 
-from .config import DEFAULT_VIEWPORT, IGNORE_DEFAULT_ARGS, get_default_stealth_args
+from .config import (
+    DEFAULT_VIEWPORT,
+    FINGERPRINT_FONTS_DIR_ENV,
+    FINGERPRINT_PLATFORM_ENV,
+    IGNORE_DEFAULT_ARGS,
+    NETWORK_PROFILES,
+    PLATFORM_CLIENT_HINT_VERSIONS,
+    PLATFORM_USER_AGENTS,
+    WEBGPU_DISABLE_FEATURE_SWITCH,
+    WEBGPU_ENABLE_FEATURE_SWITCH,
+    WEBGPU_FEATURE_NAME,
+    WEBGPU_UNSAFE_ENABLE_SWITCH,
+    WEBRTC_FORCE_IP_HANDLING_SWITCH,
+    WEBRTC_IP_HANDLING_POLICY_SWITCH,
+    WINDOWS_FONTS_DIR_ENV,
+    get_default_stealth_args,
+    get_fingerprint_fonts_dir,
+    get_fingerprint_network_profile,
+    normalize_webgpu_policy,
+    normalize_webrtc_policy,
+)
 from .download import ensure_binary
+from .hygiene import apply_launch_hygiene
 
 logger = logging.getLogger("clarkbrowser")
 
@@ -35,10 +57,14 @@ def _resolve_args(
     stealth_args: bool,
     timezone: str | None,
     locale: str | None,
+    network_profile: str | None,
+    webrtc_policy: str | None,
+    webgpu_policy: str | None,
     headless: bool,
 ) -> list[str]:
     """Merge stealth defaults + user args + dedicated params."""
     seen: dict[str, str] = {}
+    user_keys: set[str] = set()
 
     if stealth_args:
         for a in get_default_stealth_args():
@@ -46,15 +72,143 @@ def _resolve_args(
 
     if user_args:
         for a in user_args:
-            seen[a.split("=", 1)[0]] = a
+            key = a.split("=", 1)[0]
+            seen[key] = a
+            user_keys.add(key)
 
     if timezone:
         seen["--fingerprint-timezone"] = f"--fingerprint-timezone={timezone}"
     if locale:
         seen["--lang"] = f"--lang={locale}"
         seen["--fingerprint-locale"] = f"--fingerprint-locale={locale}"
+    if network_profile:
+        network_profile = network_profile.lower()
+        if network_profile not in NETWORK_PROFILES:
+            raise RuntimeError(
+                f"Unsupported network_profile={network_profile!r}. "
+                f"Supported: {', '.join(sorted(NETWORK_PROFILES))}"
+            )
+        seen["--fingerprint-network-profile"] = (
+            f"--fingerprint-network-profile={network_profile}"
+        )
+    _cohere_webrtc_policy_args(seen, webrtc_policy)
+    _cohere_webgpu_policy_args(seen, webgpu_policy, headless, stealth_args)
+
+    if stealth_args:
+        _cohere_platform_args(seen, user_keys)
+        _cohere_network_args(seen)
 
     return list(seen.values())
+
+
+def _arg_value(args: dict[str, str], key: str) -> str | None:
+    arg = args.get(key)
+    if not arg or "=" not in arg:
+        return None
+    return arg.split("=", 1)[1]
+
+
+def _cohere_platform_args(args: dict[str, str], user_keys: set[str]) -> None:
+    fp_platform = _arg_value(args, "--fingerprint-platform")
+    if fp_platform not in PLATFORM_USER_AGENTS:
+        return
+
+    if "--user-agent" not in user_keys:
+        args["--user-agent"] = f"--user-agent={PLATFORM_USER_AGENTS[fp_platform]}"
+
+    if "--fingerprint-platform-version" not in user_keys:
+        version = PLATFORM_CLIENT_HINT_VERSIONS[fp_platform]
+        if version:
+            args["--fingerprint-platform-version"] = (
+                f"--fingerprint-platform-version={version}"
+            )
+        else:
+            args.pop("--fingerprint-platform-version", None)
+
+    if "--fingerprint-fonts-dir" not in user_keys:
+        fonts_dir = get_fingerprint_fonts_dir(fp_platform)
+        if fonts_dir:
+            args["--fingerprint-fonts-dir"] = f"--fingerprint-fonts-dir={fonts_dir}"
+
+    if (
+        fp_platform == "windows"
+        and host_platform.system() != "Windows"
+        and "--fingerprint-fonts-dir" not in args
+    ):
+        raise RuntimeError(
+            "Windows fingerprint profiles require a configured font directory "
+            f"on this host. Set {WINDOWS_FONTS_DIR_ENV}, "
+            f"{FINGERPRINT_FONTS_DIR_ENV}, or pass "
+            "--fingerprint-fonts-dir. Use "
+            f"{FINGERPRINT_PLATFORM_ENV}=linux for the default Linux profile."
+        )
+
+
+def _cohere_network_args(args: dict[str, str]) -> None:
+    if "--fingerprint-network-profile" in args:
+        return
+    profile = get_fingerprint_network_profile()
+    if profile:
+        args["--fingerprint-network-profile"] = (
+            f"--fingerprint-network-profile={profile}"
+        )
+
+
+def _cohere_webrtc_policy_args(
+    args: dict[str, str], webrtc_policy: str | None
+) -> None:
+    if (
+        WEBRTC_FORCE_IP_HANDLING_SWITCH in args
+        or WEBRTC_IP_HANDLING_POLICY_SWITCH in args
+    ):
+        return
+
+    policy = normalize_webrtc_policy(webrtc_policy)
+    if policy:
+        args[WEBRTC_FORCE_IP_HANDLING_SWITCH] = (
+            f"{WEBRTC_FORCE_IP_HANDLING_SWITCH}={policy}"
+        )
+
+
+def _feature_switch_has(args: dict[str, str], switch: str, feature: str) -> bool:
+    value = _arg_value(args, switch)
+    if not value:
+        return False
+    return feature.lower() in {item.strip().lower() for item in value.split(",")}
+
+
+def _append_feature(args: dict[str, str], switch: str, feature: str) -> None:
+    value = _arg_value(args, switch)
+    if not value:
+        args[switch] = f"{switch}={feature}"
+        return
+    features = [item.strip() for item in value.split(",") if item.strip()]
+    if feature.lower() not in {item.lower() for item in features}:
+        features.append(feature)
+    args[switch] = f"{switch}={','.join(features)}"
+
+
+def _cohere_webgpu_policy_args(
+    args: dict[str, str],
+    webgpu_policy: str | None,
+    headless: bool,
+    stealth_args: bool,
+) -> None:
+    if (
+        WEBGPU_UNSAFE_ENABLE_SWITCH in args
+        or _feature_switch_has(args, WEBGPU_ENABLE_FEATURE_SWITCH, WEBGPU_FEATURE_NAME)
+        or _feature_switch_has(args, WEBGPU_DISABLE_FEATURE_SWITCH, WEBGPU_FEATURE_NAME)
+    ):
+        return
+
+    policy = normalize_webgpu_policy(webgpu_policy)
+    if policy is None and not stealth_args:
+        return
+    if policy is None:
+        policy = "headless-off"
+
+    if policy == "disabled" or (policy == "headless-off" and headless):
+        _append_feature(args, WEBGPU_DISABLE_FEATURE_SWITCH, WEBGPU_FEATURE_NAME)
 
 
 def _import_sync_playwright():
@@ -74,6 +228,9 @@ def launch(
     stealth_args: bool = True,
     timezone: str | None = None,
     locale: str | None = None,
+    network_profile: str | None = None,
+    webrtc_policy: str | None = None,
+    webgpu_policy: str | None = None,
     **kwargs: Any,
 ) -> Any:
     """Launch stealth Chromium. Returns a Playwright Browser.
@@ -85,13 +242,26 @@ def launch(
         stealth_args: include default stealth fingerprint args (default True)
         timezone: IANA timezone (sets --fingerprint-timezone)
         locale: BCP 47 locale (sets --lang + --fingerprint-locale)
+        network_profile: desktop, residential, datacenter, mobile, or slow
+        webrtc_policy: proxy-coherent, public-only, default, or off
+        webgpu_policy: headless-off, disabled, or coherent
         **kwargs: forwarded to playwright.chromium.launch()
     """
     binary_path = ensure_binary()
-    chrome_args = _resolve_args(args, stealth_args, timezone, locale, headless)
+    chrome_args = _resolve_args(
+        args,
+        stealth_args,
+        timezone,
+        locale,
+        network_profile,
+        webrtc_policy,
+        webgpu_policy,
+        headless,
+    )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
 
     logger.debug("launch(): headless=%s args=%d", headless, len(chrome_args))
+    apply_launch_hygiene(logger, chrome_args, kwargs)
 
     pw = _import_sync_playwright()().start()
     browser = pw.chromium.launch(
@@ -113,12 +283,25 @@ async def launch_async(
     stealth_args: bool = True,
     timezone: str | None = None,
     locale: str | None = None,
+    network_profile: str | None = None,
+    webrtc_policy: str | None = None,
+    webgpu_policy: str | None = None,
     **kwargs: Any,
 ) -> Any:
     """Async launch(). Returns a Playwright Browser (async API)."""
     binary_path = ensure_binary()
-    chrome_args = _resolve_args(args, stealth_args, timezone, locale, headless)
+    chrome_args = _resolve_args(
+        args,
+        stealth_args,
+        timezone,
+        locale,
+        network_profile,
+        webrtc_policy,
+        webgpu_policy,
+        headless,
+    )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
+    apply_launch_hygiene(logger, chrome_args, kwargs)
 
     pw = await _import_async_playwright()().start()
     browser = await pw.chromium.launch(
@@ -142,6 +325,9 @@ def launch_context(
     viewport: dict | None = _VIEWPORT_UNSET,  # type: ignore[assignment]
     locale: str | None = None,
     timezone: str | None = None,
+    network_profile: str | None = None,
+    webrtc_policy: str | None = None,
+    webgpu_policy: str | None = None,
     color_scheme: Literal["light", "dark", "no-preference"] | None = None,
     **kwargs: Any,
 ) -> Any:
@@ -153,6 +339,9 @@ def launch_context(
         stealth_args=stealth_args,
         timezone=timezone,
         locale=locale,
+        network_profile=network_profile,
+        webrtc_policy=webrtc_policy,
+        webgpu_policy=webgpu_policy,
     )
     ctx_kwargs: dict[str, Any] = {}
     if user_agent:
@@ -185,6 +374,9 @@ async def launch_context_async(
     viewport: dict | None = _VIEWPORT_UNSET,  # type: ignore[assignment]
     locale: str | None = None,
     timezone: str | None = None,
+    network_profile: str | None = None,
+    webrtc_policy: str | None = None,
+    webgpu_policy: str | None = None,
     color_scheme: Literal["light", "dark", "no-preference"] | None = None,
     **kwargs: Any,
 ) -> Any:
@@ -196,6 +388,9 @@ async def launch_context_async(
         stealth_args=stealth_args,
         timezone=timezone,
         locale=locale,
+        network_profile=network_profile,
+        webrtc_policy=webrtc_policy,
+        webgpu_policy=webgpu_policy,
     )
     ctx_kwargs: dict[str, Any] = {}
     if user_agent:
@@ -232,12 +427,25 @@ def launch_persistent_context(
     viewport: dict | None = _VIEWPORT_UNSET,  # type: ignore[assignment]
     locale: str | None = None,
     timezone: str | None = None,
+    network_profile: str | None = None,
+    webrtc_policy: str | None = None,
+    webgpu_policy: str | None = None,
     **kwargs: Any,
 ) -> Any:
     """Persistent profile: cookies/localStorage survive across runs."""
     binary_path = ensure_binary()
-    chrome_args = _resolve_args(args, stealth_args, timezone, locale, headless)
+    chrome_args = _resolve_args(
+        args,
+        stealth_args,
+        timezone,
+        locale,
+        network_profile,
+        webrtc_policy,
+        webgpu_policy,
+        headless,
+    )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
+    apply_launch_hygiene(logger, chrome_args, kwargs)
 
     ctx_kwargs: dict[str, Any] = {}
     if user_agent:
@@ -274,12 +482,25 @@ async def launch_persistent_context_async(
     viewport: dict | None = _VIEWPORT_UNSET,  # type: ignore[assignment]
     locale: str | None = None,
     timezone: str | None = None,
+    network_profile: str | None = None,
+    webrtc_policy: str | None = None,
+    webgpu_policy: str | None = None,
     **kwargs: Any,
 ) -> Any:
     """Async launch_persistent_context()."""
     binary_path = ensure_binary()
-    chrome_args = _resolve_args(args, stealth_args, timezone, locale, headless)
+    chrome_args = _resolve_args(
+        args,
+        stealth_args,
+        timezone,
+        locale,
+        network_profile,
+        webrtc_policy,
+        webgpu_policy,
+        headless,
+    )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
+    apply_launch_hygiene(logger, chrome_args, kwargs)
 
     ctx_kwargs: dict[str, Any] = {}
     if user_agent:

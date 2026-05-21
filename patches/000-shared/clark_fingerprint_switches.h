@@ -85,6 +85,25 @@ extern const char kFingerprintMaxTouchPoints[];
 // AudioContext.sampleRate. Integer in {44100, 48000}.
 extern const char kFingerprintAudioSampleRate[];
 
+// navigator.connection network profile. One of:
+// "desktop" | "residential" | "datacenter" | "mobile" | "slow".
+extern const char kFingerprintNetworkProfile[];
+
+// navigator.connection.type override. One of:
+// "wifi" | "ethernet" | "cellular" | "bluetooth" | "wimax" |
+// "other" | "none" | "unknown".
+extern const char kFingerprintConnectionType[];
+
+// navigator.connection.effectiveType override.
+// One of: "slow-2g" | "2g" | "3g" | "4g".
+extern const char kFingerprintEffectiveType[];
+
+// navigator.connection.rtt override in milliseconds.
+extern const char kFingerprintRtt[];
+
+// navigator.connection.downlink override in megabits per second.
+extern const char kFingerprintDownlink[];
+
 // Disable canvas/WebGL/audio noise overlay while keeping the
 // deterministic seed in effect. Value: "true" | "false". Default: not set
 // (= noise on).

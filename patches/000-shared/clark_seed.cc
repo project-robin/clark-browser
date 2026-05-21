@@ -36,6 +36,58 @@ std::string SeedString() {
                          // in Hash() below.
 }
 
+struct NetworkProfileDefinition {
+  const char* name;
+  const char* connection_type;
+  const char* effective_type;
+  uint32_t min_rtt_msec;
+  uint32_t rtt_span_msec;
+  uint32_t min_downlink_tenths;
+  uint32_t downlink_span_tenths;
+};
+
+const NetworkProfileDefinition& DesktopNetworkProfile() {
+  static constexpr NetworkProfileDefinition kProfile = {
+      "desktop", "wifi", "4g", 35, 90, 80, 260};
+  return kProfile;
+}
+
+const NetworkProfileDefinition& NetworkProfileForName(std::string name) {
+  static constexpr NetworkProfileDefinition kProfiles[] = {
+      {"residential", "wifi", "4g", 45, 130, 60, 240},
+      {"datacenter", "ethernet", "4g", 10, 55, 300, 900},
+      {"mobile", "cellular", "4g", 70, 170, 20, 130},
+      {"slow", "cellular", "3g", 250, 450, 4, 24},
+  };
+
+  name = base::ToLowerASCII(name);
+  for (const auto& profile : kProfiles) {
+    if (name == profile.name)
+      return profile;
+  }
+  return DesktopNetworkProfile();
+}
+
+const char* CanonicalConnectionType(std::string_view value) {
+  if (value == "wifi") return "wifi";
+  if (value == "ethernet") return "ethernet";
+  if (value == "cellular") return "cellular";
+  if (value == "bluetooth") return "bluetooth";
+  if (value == "wimax") return "wimax";
+  if (value == "other") return "other";
+  if (value == "none") return "none";
+  if (value == "unknown") return "unknown";
+  return nullptr;
+}
+
+const char* CanonicalEffectiveType(std::string_view value) {
+  if (value == "slow-2g") return "slow-2g";
+  if (value == "2g") return "2g";
+  if (value == "3g") return "3g";
+  if (value == "4g") return "4g";
+  return nullptr;
+}
+
 }  // namespace
 
 std::string Get() { return SeedString(); }
@@ -125,6 +177,52 @@ uint32_t TaskbarHeight() {
   if (plat == "macos") return 95;
   if (plat == "linux") return 0;
   return 48;  // windows default
+}
+
+NetworkQuality Network() {
+  auto* cl = base::CommandLine::ForCurrentProcess();
+  const auto& profile = NetworkProfileForName(
+      cl->GetSwitchValueASCII(clark::switches::kFingerprintNetworkProfile));
+
+  NetworkQuality value = {
+      profile.connection_type,
+      profile.effective_type,
+      profile.min_rtt_msec +
+          static_cast<uint32_t>(Hash("net.rtt") %
+                                (profile.rtt_span_msec + 1)),
+      static_cast<double>(
+          profile.min_downlink_tenths +
+          static_cast<uint32_t>(Hash("net.downlink") %
+                                (profile.downlink_span_tenths + 1))) /
+          10.0,
+  };
+
+  std::string connection_type = base::ToLowerASCII(
+      cl->GetSwitchValueASCII(clark::switches::kFingerprintConnectionType));
+  if (const char* canonical = CanonicalConnectionType(connection_type))
+    value.connection_type = canonical;
+
+  std::string effective_type = base::ToLowerASCII(
+      cl->GetSwitchValueASCII(clark::switches::kFingerprintEffectiveType));
+  if (const char* canonical = CanonicalEffectiveType(effective_type))
+    value.effective_type = canonical;
+
+  unsigned rtt = 0;
+  if (base::StringToUint(
+          cl->GetSwitchValueASCII(clark::switches::kFingerprintRtt), &rtt) &&
+      rtt > 0 && rtt <= 5000) {
+    value.rtt_msec = rtt;
+  }
+
+  double downlink = 0;
+  if (base::StringToDouble(
+          cl->GetSwitchValueASCII(clark::switches::kFingerprintDownlink),
+          &downlink) &&
+      downlink > 0 && downlink <= 10000) {
+    value.downlink_mbps = downlink;
+  }
+
+  return value;
 }
 
 bool NoiseEnabled() {

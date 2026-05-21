@@ -46,7 +46,7 @@ index 48d024ccc2..11032f57ab 100644
    // details.
    //
    // We acquire a few associated interface proxies here -- before the channel is
-@@ -3703,6 +3705,28 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+@@ -3703,6 +3705,33 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
    // Propagate the following switches to the renderer command line (along
    // with any associated values) if present in the browser command line.
    static const char* const kSwitchNames[] = {
@@ -71,11 +71,16 @@ index 48d024ccc2..11032f57ab 100644
 +      clark::switches::kFingerprintWebrtcIp,
 +      clark::switches::kFingerprintMaxTouchPoints,
 +      clark::switches::kFingerprintAudioSampleRate,
++      clark::switches::kFingerprintNetworkProfile,
++      clark::switches::kFingerprintConnectionType,
++      clark::switches::kFingerprintEffectiveType,
++      clark::switches::kFingerprintRtt,
++      clark::switches::kFingerprintDownlink,
 +      clark::switches::kFingerprintNoise,
        switches::kDisableInProcessStackTraces,
        sandbox::policy::switches::kDisableLandlockSandbox,
        sandbox::policy::switches::kDisableSeccompFilterSandbox,
-@@ -3765,6 +3789,9 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+@@ -3765,6 +3794,9 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
        switches::kEnableWebGLDraftExtensions,
        switches::kEnableWebGPUDeveloperFeatures,
        switches::kFileUrlPathAlias,
@@ -85,4 +90,3 @@ index 48d024ccc2..11032f57ab 100644
        switches::kForceDeviceScaleFactor,
        switches::kForceDisplayColorProfile,
        switches::kForceHighContrast,
-

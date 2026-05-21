@@ -59,6 +59,16 @@ ScreenSize Screen();
 // --fingerprint-platform (or "windows" default).
 uint32_t TaskbarHeight();
 
+// navigator.connection defaults. Values are deterministic for the same
+// --fingerprint seed and are shaped by --fingerprint-network-profile when set.
+struct NetworkQuality {
+  const char* connection_type;
+  const char* effective_type;
+  uint32_t rtt_msec;
+  double downlink_mbps;
+};
+NetworkQuality Network();
+
 // Whether canvas/WebGL/audio noise is enabled (default true). False if
 // --fingerprint-noise=false explicitly.
 bool NoiseEnabled();

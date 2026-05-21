@@ -25,6 +25,26 @@ This leaks:
 Even through a proxy at the HTTP layer, WebRTC ICE happens at a lower
 layer and bypasses the proxy by default.
 
+## Proxy-coherent launcher policy
+
+Clark exposes an opt-in proxy-coherent mode without waiting for the deeper
+#38 ICE-candidate replacement patch:
+
+- Python API: `webrtc_policy="proxy-coherent"`
+- Env var: `CLARK_WEBRTC_POLICY=proxy-coherent`
+- Chromium switch:
+  `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`
+
+Chromium maps `disable_non_proxied_udp` to disabling non-proxied UDP in Blink's
+WebRTC port allocator. With an HTTP proxy, that prevents WebRTC/STUN from
+taking a different direct route than the page's HTTP traffic; if UDP proxying is
+not available, WebRTC falls back to proxied TCP. This matches RFC 8828's Mode 4
+framing: forcing proxy use trades media quality for route/privacy coherence.
+
+This mode remains opt-in because many real WebRTC applications depend on direct
+UDP. It is separate from #38: proxy-coherent mode constrains routing, while
+`--fingerprint-webrtc-ip` is still the future explicit candidate spoofing patch.
+
 ## #38 — `--fingerprint-webrtc-ip` replaces ICE host candidate
 
 **File:** `third_party/webrtc/rtc_base/network.cc`, class

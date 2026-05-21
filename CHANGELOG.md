@@ -11,6 +11,28 @@
   platform version for the default stealth profile.
 - Fixed Linux auto-download resolution to look for the packaged
   `headless_shell` binary after extracting the release tarball.
+- Linux launcher defaults now use a Linux fingerprint profile unless
+  `CLARK_WINDOWS_FONTS_DIR` is configured, preventing a Windows UA/Win32 profile
+  from pairing with a tiny Linux font set.
+- Added `CLARK_FINGERPRINT_PLATFORM`, `CLARK_FINGERPRINT_FONTS_DIR`, and
+  `CLARK_WINDOWS_FONTS_DIR` launcher hooks for explicit platform/font profiles.
+- `Notification.permission` now returns `default` under Clark fingerprint mode,
+  matching `permissions.query({name: "notifications"})` returning `prompt`.
+- Added `patches/0051-network-information-profile.patch` so
+  `navigator.connection.rtt`, `downlink`, and `effectiveType` come from
+  seed-stable network profiles instead of leaking host NQE values like `rtt=0`.
+- Added opt-in proxy-coherent WebRTC routing via `webrtc_policy="proxy-coherent"`
+  or `CLARK_WEBRTC_POLICY=proxy-coherent`, mapping to Chromium's
+  `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` so proxied
+  sessions do not leak a separate non-proxied UDP route.
+- Added `patches/0049-webgpu-adapter-info-coherent.patch` so
+  `GPUAdapter.info` and `GPUDevice.adapterInfo` match the WebGL GPU pool when
+  WebGPU is enabled. Headless launches now deliberately disable WebGPU by
+  default; set `CLARK_WEBGPU_POLICY=coherent` or pass
+  `webgpu_policy="coherent"` to leave it available.
+- Added launch hygiene warnings for accidental DevTools/CDP/automation switch
+  footguns, plus `InteractionPacer` helpers to keep agent clicks from bursting
+  faster than the page can reasonably respond.
 - Linux release tarballs now include the headless resource packs, runtime
   helper libraries, and a `chrome` launcher that execs `headless_shell`,
   preserving compatibility with older wrappers.
@@ -103,13 +125,15 @@ with a Windows fingerprint and swiftshader-WebGL enabled.
 - Audio noise covers only `AudioBuffer::getChannelData` and `copyFromChannel`.
   `AnalyserNode.getFloatFrequencyData()` and `MediaStreamAudioSourceNode`
   routes are not yet perturbed.
-- Font enumeration (patch series #29-#31) still uses host fonts. Bundling
-  a target-platform font set and gating through `--fingerprint-fonts-dir`
-  is specified but not implemented.
+- Font enumeration (patch series #29-#31) still uses host fonts. The launcher
+  now avoids claiming Windows on Linux unless a Windows font directory is
+  configured, but full FontCache plumbing for packaged target-platform fonts is
+  still deferred.
 - TLS / ClientHello fingerprint (#40-#44) not patched. Requires BoringSSL
   customization (or an external utls-style proxy) to alter JA3/JA4.
-- WebGPU adapter info (#49) follows the same pattern as WebGL — not yet
-  wired.
+- WebGPU adapter info (#49) is wired when WebGPU is enabled, but live
+  detection-site evidence still needs a rebuilt binary with WebGPU explicitly
+  enabled.
 
 ## 0.1.0 — initial release (May 2026)
 

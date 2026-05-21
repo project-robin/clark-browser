@@ -35,6 +35,12 @@ from .config import (
     get_chromium_version,
 )
 from .download import ensure_binary, binary_info, clear_cache
+from .hygiene import (
+    LaunchHygieneFinding,
+    apply_launch_hygiene,
+    assess_launch_hygiene,
+)
+from .interaction import AsyncInteractionPacer, InteractionPacer
 
 __all__ = [
     "__version__",
@@ -50,4 +56,9 @@ __all__ = [
     "ensure_binary",
     "binary_info",
     "clear_cache",
+    "LaunchHygieneFinding",
+    "apply_launch_hygiene",
+    "assess_launch_hygiene",
+    "InteractionPacer",
+    "AsyncInteractionPacer",
 ]

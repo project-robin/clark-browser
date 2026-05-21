@@ -17,9 +17,11 @@ repo as actual code vs spec-only.
 | #32-#35 Time / locale | `specs/G-time-locale.md` |
 | #36-#37 Storage | `specs/H-storage.md` |
 | #38-#39 WebRTC | `specs/I-webrtc.md` |
+| WebRTC proxy-coherent policy | `clarkbrowser/browser.py` + `specs/I-webrtc.md` |
 | #40-#44 TLS / HTTP | `specs/J-tls-http.md` + `specs/40-tls-fingerprint.md` |
 | #45-#48 Headless / automation | `specs/K-headless.md` |
-| #49 WebGPU | `specs/L-webgpu.md` |
+| #49 WebGPU | `patches/0049-webgpu-adapter-info-coherent.patch` + `specs/L-webgpu.md` |
+| #51 Network Information | `patches/0051-network-information-profile.patch` |
 | #18 GPU pool (largest single patch) | `specs/18-webgl-gpu-pool.md` |
 | #03 plugin spec | `specs/03-plugins.md` |
 
@@ -46,7 +48,7 @@ Legend:
 | 07 | `navigator.hardwareConcurrency` from CLI | Chromium has `Emulation.set...Override` we adapt | 🟡 | `patches/0006-...` |
 | 08 | `navigator.deviceMemory` from CLI | Web Platform Device Memory API | 🟡 | `patches/0008-...` |
 | 09 | `navigator.userAgentData` brands/platform from CLI | Sec-CH-UA spec, upstream `embedder_support` | 🟡 | `patches/0007-...` |
-| 10 | `Notification.permission` not 'denied' under automation | MDN | 🟢 | spec |
+| 10 | `Notification.permission` not 'denied' under automation | MDN | 🟢 | `patches/0010-...` |
 
 ## B. Screen / Window / DPR (Moderate, all fresh)
 
@@ -118,6 +120,7 @@ collapse to **enabling and re-keying** existing features — see specs.
 
 | # | Patch | Idea source | Category | Status |
 |---|---|---|---|---|
+| policy | opt-in proxy-coherent WebRTC route policy | RFC 8828 + Chromium IP handling policy | 🟢 | launcher |
 | 38 | `--fingerprint-webrtc-ip` replaces ICE host candidate | webrtc `BasicNetworkManager` upstream | 🟠 | spec |
 | 39 | mDNS host-candidate enabled (consistent with real Chrome) | RFC 8835 | 🟢 | spec |
 
@@ -144,7 +147,13 @@ collapse to **enabling and re-keying** existing features — see specs.
 
 | # | Patch | Idea source | Category | Status |
 |---|---|---|---|---|
-| 49 | `navigator.gpu.requestAdapter()` consistent with WebGL vendor | WebGPU spec | 🟡 | spec |
+| 49 | `GPUAdapterInfo` consistent with WebGL GPU pool when WebGPU is enabled | WebGPU spec | 🟡 | `patches/0049-...` |
+
+## M. Network Information (Trivial-Moderate)
+
+| # | Patch | Idea source | Category | Status |
+|---|---|---|---|---|
+| 51 | `navigator.connection.{rtt,downlink,effectiveType}` from a seed/profile | Network Information spec + Chromium upstream | 🟡 | `patches/0051-...` |
 
 ## Build-order / dependency notes
 

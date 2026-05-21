@@ -15,7 +15,9 @@ What it covers:
     hardwareConcurrency, maxTouchPoints, timezone, locale, languages,
     plugins.length, window.chrome, webdriver, UA Client Hints) when launched with
     --fingerprint-platform=windows + matched --user-agent.
- 2. Audio fingerprint differential across two seeds.
+ 2. Network Information values from the configured datacenter profile.
+ 3. WebGPU is either intentionally unavailable or coherent with WebGL.
+ 4. Audio fingerprint differential across two seeds.
 
 Exit code is the number of failed assertions; 0 = full pass.
 """
@@ -188,7 +190,9 @@ def main() -> int:
         "--fingerprint-max-touch-points=0",
         "--fingerprint-timezone=America/New_York",
         "--fingerprint-locale=en-US",
+        "--fingerprint-network-profile=datacenter",
         "--accept-lang=en-US,en",
+        "--disable-features=WebGPU",
         "--fingerprinting-client-rects-noise",
         "--fingerprinting-canvas-measuretext-noise",
         "--fingerprinting-canvas-image-data-noise",
@@ -234,6 +238,85 @@ def main() -> int:
         expect("timezone", cdp_eval("Intl.DateTimeFormat().resolvedOptions().timeZone"),
                lambda v: v == '"America/New_York"', '"America/New_York"')
         expect("locale", cdp_eval("navigator.language"), lambda v: v == '"en-US"', '"en-US"')
+        expect("Notification.permission", cdp_eval("Notification.permission"),
+               lambda v: v == '"default"', '"default"')
+        expect("permissions.query notifications", cdp_eval("""
+            (async () => {
+              return (await navigator.permissions.query({name: 'notifications'})).state;
+            })()
+        """), lambda v: v == '"prompt"', '"prompt"')
+        network_state = cdp_eval("""
+            ({
+              effectiveType: navigator.connection.effectiveType,
+              rtt: navigator.connection.rtt,
+              downlink: navigator.connection.downlink,
+              saveData: navigator.connection.saveData,
+            })
+        """)
+        expect("navigator.connection datacenter profile", network_state,
+               lambda v: json_ok(v, lambda n:
+                   isinstance(n, dict) and
+                   n.get("effectiveType") == "4g" and
+                   isinstance(n.get("rtt"), int) and
+                   10 <= n.get("rtt") <= 65 and
+                   isinstance(n.get("downlink"), (int, float)) and
+                   30 <= n.get("downlink") <= 120 and
+                   n.get("saveData") is False),
+               "4g, rtt 10-65ms, downlink 30-120Mbps, saveData false")
+        webgpu_state = cdp_eval("""
+            (async () => {
+              const canvas = document.createElement('canvas');
+              const gl = canvas.getContext('webgl') ||
+                  canvas.getContext('experimental-webgl');
+              const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+              const webglVendor = ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : '';
+              const webglRenderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '';
+              if (!navigator.gpu) {
+                return {
+                  supported: false,
+                  reason: 'navigator.gpu absent',
+                  webglVendor,
+                  webglRenderer,
+                };
+              }
+              const adapter = await navigator.gpu.requestAdapter();
+              if (!adapter) {
+                return {
+                  supported: false,
+                  reason: 'requestAdapter null',
+                  webglVendor,
+                  webglRenderer,
+                };
+              }
+              const info = adapter.info || (
+                  adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : {});
+              return {
+                supported: true,
+                webglVendor,
+                webglRenderer,
+                vendor: info.vendor || '',
+                architecture: info.architecture || '',
+                device: info.device || '',
+                description: info.description || '',
+              };
+            })()
+        """)
+        expect("WebGPU coherent or intentionally unavailable", webgpu_state,
+               lambda v: json_ok(v, lambda g:
+                   isinstance(g, dict) and (
+                       g.get("supported") is False or (
+                           g.get("supported") is True and
+                           (
+                               not g.get("vendor") or
+                               str(g.get("vendor")).lower() in (
+                                   str(g.get("webglVendor", "")) + " " +
+                                   str(g.get("webglRenderer", ""))
+                               ).lower()
+                           ) and
+                           isinstance(g.get("description"), str)
+                       )
+                   )),
+               "unsupported with reason, or WebGPU vendor/description matches WebGL")
         ua = cdp_eval("navigator.userAgent")
         expect("UA = windows", ua,
                lambda v: "Windows NT 10.0" in v and "HeadlessChrome" not in v,

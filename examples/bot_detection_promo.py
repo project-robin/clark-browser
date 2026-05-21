@@ -1,11 +1,13 @@
 # Copyright 2026 Clark Labs Inc.
 # SPDX-License-Identifier: MIT
 
-"""Generate promo media from a real clark-browser bot-detection run.
+"""Refresh promo media from a real clark-browser bot-detection run.
 
-The script launches clarkbrowser, visits SannySoft's public antibot check,
-asserts the core automation signals pass, and writes MP4 + GIF assets to
-the repo's promo/ directory.
+This is a maintainer/demo script, not the simplest starter example. It launches
+clarkbrowser, visits SannySoft's public antibot check, asserts the core
+automation signals pass, and writes MP4 + GIF assets to the repo's promo/
+directory. It requires ffmpeg, network access, and the current SannySoft page
+text to match the assertions below.
 
 For local source builds, point CLARK_BINARY_PATH at the patched Chromium:
 
@@ -38,6 +40,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=800)
     parser.add_argument("--gif-width", type=int, default=760)
     parser.add_argument("--fingerprint", default="42424")
+    parser.add_argument("--timezone", default="America/Los_Angeles")
+    parser.add_argument("--locale", default="en-US")
+    parser.add_argument("--network-profile", default="datacenter")
     parser.add_argument("--timeout-ms", type=int, default=90_000)
     parser.add_argument("--keep-webm", action="store_true")
     return parser.parse_args()
@@ -112,9 +117,11 @@ def record_visit(args: argparse.Namespace, video_dir: Path) -> tuple[Path, dict[
         viewport={"width": args.width, "height": args.height},
         record_video_dir=str(video_dir),
         record_video_size={"width": args.width, "height": args.height},
+        timezone=args.timezone,
+        locale=args.locale,
+        network_profile=args.network_profile,
         args=[
             f"--fingerprint={args.fingerprint}",
-            "--fingerprint-platform=windows",
         ],
     )
     page = context.new_page()

@@ -24,6 +24,11 @@ const char kFingerprintLocation[]          = "fingerprint-location";
 const char kFingerprintWebrtcIp[]          = "fingerprint-webrtc-ip";
 const char kFingerprintMaxTouchPoints[]    = "fingerprint-max-touch-points";
 const char kFingerprintAudioSampleRate[]   = "fingerprint-audio-sample-rate";
+const char kFingerprintNetworkProfile[]    = "fingerprint-network-profile";
+const char kFingerprintConnectionType[]     = "fingerprint-connection-type";
+const char kFingerprintEffectiveType[]      = "fingerprint-effective-type";
+const char kFingerprintRtt[]                = "fingerprint-rtt";
+const char kFingerprintDownlink[]           = "fingerprint-downlink";
 const char kFingerprintNoise[]             = "fingerprint-noise";
 
 }  // namespace clark::switches

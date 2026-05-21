@@ -44,13 +44,19 @@ PY
 Set a stable fingerprint for the session:
 
 ```bash
-export CLARK_UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+export CLARK_UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
 
 export CLARK_ARGS="--no-sandbox,\
 --fingerprint=12345,\
---fingerprint-platform=windows,\
+--fingerprint-platform=linux,\
+--fingerprint-brand=Chrome,\
+--fingerprint-brand-version=148.0.0.0,\
 --fingerprint-timezone=America/Los_Angeles,\
 --fingerprint-locale=en-US,\
+--fingerprint-network-profile=datacenter,\
+--disable-features=WebGPU,\
+--lang=en-US,\
+--accept-lang=en-US,en,\
 --user-agent=${CLARK_UA}"
 ```
 
@@ -85,7 +91,8 @@ Expected smoke-test shape:
 - `navigator.webdriver` returns `false`
 - `navigator.plugins.length` is non-zero
 - `navigator.userAgent` does not contain `HeadlessChrome`
-- `navigator.platform`, timezone, locale, and proxy location are consistent
+- `navigator.platform`, User-Agent, timezone, locale, and proxy geography are
+  consistent
 
 ## Environment-variable form
 
@@ -117,9 +124,14 @@ Use CDP attach when you want to start the Chromium process yourself.
   --user-data-dir=/tmp/clark-browser-agent-profile \
   --no-sandbox \
   --fingerprint=12345 \
-  --fingerprint-platform=windows \
+  --fingerprint-platform=linux \
+  --fingerprint-brand=Chrome \
+  --fingerprint-brand-version=148.0.0.0 \
   --fingerprint-timezone=America/Los_Angeles \
   --fingerprint-locale=en-US \
+  --disable-features=WebGPU \
+  --lang=en-US \
+  --accept-lang=en-US,en \
   --user-agent="$CLARK_UA" \
   about:blank
 ```
@@ -139,7 +151,16 @@ layer. Any process that can reach the debugging port can control the browser.
 
 - Keep one identity stable for a session. Do not rotate fingerprint, timezone,
   language, viewport, and IP between clicks.
-- Match proxy geography to timezone and locale.
+- Match proxy geography/type to timezone, locale, and network profile.
+- For HTTP proxy sessions, add
+  `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` or set
+  `CLARK_WEBRTC_POLICY=proxy-coherent` so WebRTC does not expose a different
+  non-proxied route.
+- For headless sessions, keep WebGPU deliberately disabled
+  (`--disable-features=WebGPU`) unless you are explicitly enabling it and using
+  the coherent WebGPU adapter-info patch.
+- Use a Linux profile on Linux unless you also pass a real Windows font pack via
+  `--fingerprint-fonts-dir`; otherwise font enumeration exposes the host.
 - Prefer `snapshot -i` and `@ref` clicks for agent workflows.
 - Use screenshots for visual confirmation.
 - Restart the `agent-browser` session after changing executable path, profile,
