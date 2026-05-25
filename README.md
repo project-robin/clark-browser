@@ -99,7 +99,7 @@ Protocol client (CDP over HTTP/WebSocket).
 # Linux: extract and launch with CDP on port 9222
 tar -xzf clark-browser-linux-x64.tar.gz
 CLARK_UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
-./headless_shell \
+./chrome \
   --headless=new \
   --no-sandbox \
   --remote-debugging-port=9222 \
@@ -120,8 +120,8 @@ CLARK_UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)
   about:blank
 ```
 
-The Linux tarball contains the `headless_shell` binary (~270 MB), a `chrome`
-compatibility launcher, headless resource packs, and runtime helper libraries.
+The Linux tarball contains the `chrome` binary, a `headless_shell`
+compatibility launcher, Chrome resource packs, and runtime helper libraries.
 The macOS arm64 build produces a normal `Chromium.app` bundle.
 
 ## Stealth surface

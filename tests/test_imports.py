@@ -485,12 +485,23 @@ def test_download_url_uses_current_stealth_release(monkeypatch) -> None:
     assert (
         config.get_download_url()
         == "https://github.com/clark-labs-inc/clark-browser/releases/download/"
-        "chromium-v148.0.7778.96-stealth2/clark-browser-linux-x64.tar.gz"
+        "chromium-v148.0.7778.96-stealth3/clark-browser-linux-x64.tar.gz"
     )
 
 
-def test_linux_binary_path_matches_tarball(monkeypatch) -> None:
+def test_linux_binary_path_prefers_chrome_tarball(monkeypatch) -> None:
     from clarkbrowser import config
     monkeypatch.setattr(config.platform, "system", lambda: "Linux")
     monkeypatch.setattr(config.platform, "machine", lambda: "x86_64")
+    assert config.get_binary_path().name == "chrome"
+
+
+def test_linux_binary_path_keeps_headless_fallback(monkeypatch, tmp_path) -> None:
+    from clarkbrowser import config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(config.platform, "machine", lambda: "x86_64")
+    monkeypatch.setenv("CLARK_CACHE_DIR", str(tmp_path))
+    binary_dir = config.get_binary_dir()
+    binary_dir.mkdir(parents=True)
+    (binary_dir / "headless_shell").touch()
     assert config.get_binary_path().name == "headless_shell"

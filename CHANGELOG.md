@@ -9,8 +9,8 @@
   the host identity when `--user-agent` is set.
 - The Python launcher now passes a Chrome UA-CH brand/version and a coherent
   platform version for the default stealth profile.
-- Fixed Linux auto-download resolution to look for the packaged
-  `headless_shell` binary after extracting the release tarball.
+- Fixed Linux auto-download resolution to prefer the packaged `chrome` binary
+  while falling back to `headless_shell` for older cached tarballs.
 - Linux launcher defaults now use a Linux fingerprint profile unless
   `CLARK_WINDOWS_FONTS_DIR` is configured, preventing a Windows UA/Win32 profile
   from pairing with a tiny Linux font set.
@@ -33,9 +33,9 @@
 - Added launch hygiene warnings for accidental DevTools/CDP/automation switch
   footguns, plus `InteractionPacer` helpers to keep agent clicks from bursting
   faster than the page can reasonably respond.
-- Linux release tarballs now include the headless resource packs, runtime
-  helper libraries, and a `chrome` launcher that execs `headless_shell`,
-  preserving compatibility with older wrappers.
+- Linux builds now support `CLARK_BROWSER_TARGET=chrome` while keeping the
+  existing `headless_shell` lane for rollback. Chrome-target tarballs include
+  the real `chrome` binary plus a `headless_shell` compatibility launcher.
 - The Linux Docker build runner now defaults to host memory and keeps
   `CLARK_LINUX_BUILD_MEMORY` as an opt-in cap for constrained local builds.
 

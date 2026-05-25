@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-dev libharfbuzz-dev libicu-dev \
     libjpeg-dev libjsoncpp-dev liblcms2-dev libopus-dev \
     libpng-dev libreadline-dev libsqlite3-dev libwebp-dev \
-    libxcursor-dev libxext-dev libxfixes-dev libxi-dev \
+    libxcursor-dev libx11-xcb-dev libxext-dev libxfixes-dev libxi-dev \
     libxinerama-dev libxkbfile-dev libxrandr-dev libxrender-dev \
     libxshmfence-dev libxslt1-dev libxss-dev libxtst-dev \
     libz3-dev mesa-common-dev uuid-dev \

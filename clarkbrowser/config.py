@@ -16,7 +16,7 @@ from ._version import __version__
 # Updated when we rebase against a newer upstream + ungoogled-chromium tag.
 # ---------------------------------------------------------------------------
 CHROMIUM_VERSION = "148.0.7778.96"
-CHROMIUM_RELEASE_TAG = "chromium-v148.0.7778.96-stealth2"
+CHROMIUM_RELEASE_TAG = "chromium-v148.0.7778.96-stealth3"
 
 PLATFORM_CHROMIUM_VERSIONS: dict[str, str] = {
     "linux-x64": CHROMIUM_VERSION,
@@ -296,7 +296,11 @@ def get_binary_path(version: str | None = None) -> Path:
     binary_dir = get_binary_dir(version)
     if platform.system() == "Darwin":
         return binary_dir / "Chromium.app" / "Contents" / "MacOS" / "Chromium"
-    return binary_dir / "headless_shell"
+    chrome = binary_dir / "chrome"
+    headless = binary_dir / "headless_shell"
+    if chrome.exists() or not headless.exists():
+        return chrome
+    return headless
 
 
 def get_local_binary_override() -> str | None:

@@ -13,6 +13,16 @@ WORK="${CLARK_WORK_DIR:-/work}"
 PATCHES="/patches"
 OUT="/out"
 PYTHON=$(command -v python3)
+CLARK_BROWSER_TARGET="${CLARK_BROWSER_TARGET:-headless_shell}"
+case "$CLARK_BROWSER_TARGET" in
+  headless|headless_shell) CLARK_BROWSER_TARGET="headless_shell" ;;
+  chrome) CLARK_BROWSER_TARGET="chrome" ;;
+  *)
+    echo "[clark-build] unsupported CLARK_BROWSER_TARGET=$CLARK_BROWSER_TARGET" >&2
+    echo "[clark-build] supported targets: headless_shell, chrome" >&2
+    exit 2
+    ;;
+esac
 
 # Detect host architecture. The chromium build supports cross-compiling from
 # a linux/arm64 host (no Rosetta on Apple Silicon = ~3-5x faster) to a
@@ -39,7 +49,7 @@ if [[ "$HOST_ARCH" == "arm64" && -f /work/build/src/buildtools/linux64/gn ]]; th
   fi
 fi
 
-echo "[clark-build] work=$WORK patches=$PATCHES out=$OUT"
+echo "[clark-build] work=$WORK patches=$PATCHES out=$OUT target=$CLARK_BROWSER_TARGET"
 mkdir -p "$WORK" "$OUT"
 
 cd "$WORK"
@@ -291,8 +301,14 @@ cd ../..
 echo "[clark-build] Building (this is the multi-hour step)..."
 cd build/src
 mkdir -p out/Default
-cat > out/Default/args.gn <<'GNEOF'
+if [[ "$CLARK_BROWSER_TARGET" == "headless_shell" ]]; then
+  cat > out/Default/args.gn <<'GNEOF'
 import("//build/args/headless.gn")
+GNEOF
+else
+  : > out/Default/args.gn
+fi
+cat >> out/Default/args.gn <<'GNEOF'
 is_debug = false
 # Keep official_build true to avoid pulling in devtools-frontend bundling
 # (which needs esbuild that our nohooks gclient sync didn't fetch). Disable
@@ -503,30 +519,65 @@ GNEOF
 fi
 
 "$GN_BIN" gen out/Default
-# Build `headless_shell` (the minimal chromium with a renderer) instead of
-# `chrome`. Our stealth patches live in content/, blink/, and the headless
-# renderer client, which headless_shell pulls in. Avoids the chrome/browser
-# UI layer and the safe_browsing target graph (which depends on ungoogled
-# patches that don't cleanly apply at the current tip-of-148 source).
-ninja -C out/Default -j "$(nproc)" headless_shell
+echo "[clark-build] Ninja target: $CLARK_BROWSER_TARGET"
+ninja -C out/Default -j "$(nproc)" "$CLARK_BROWSER_TARGET"
 
 # Stage 7: package --------------------------------------------------------------
 echo "[clark-build] Packaging..."
 cd out/Default
-cat > chrome <<'SHEOF'
+if [[ "$CLARK_BROWSER_TARGET" == "headless_shell" ]]; then
+  # Backward-compatible launcher for callers that expect a Chrome-like name.
+  cat > chrome <<'SHEOF'
 #!/bin/sh
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$HERE/headless_shell" "$@"
 SHEOF
-chmod +x chrome
-PACKAGE_FILES=(
-  chrome
-  headless_shell
-  headless_command_resources.pak
-  headless_lib_data.pak
-  headless_lib_strings.pak
-)
+  chmod +x chrome
+else
+  # Backward-compatible launcher for older wrapper code and manual scripts
+  # that still point at the historical headless_shell path.
+  cat > headless_shell <<'SHEOF'
+#!/bin/sh
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$HERE/chrome" "$@"
+SHEOF
+  chmod +x headless_shell
+fi
+
+PACKAGE_FILES=()
+add_package_file() {
+  local path="$1"
+  if [[ -e "$path" ]]; then
+    local existing
+    for existing in "${PACKAGE_FILES[@]}"; do
+      if [[ "$existing" == "$path" ]]; then
+        return
+      fi
+    done
+    PACKAGE_FILES+=("$path")
+  fi
+}
+add_package_glob() {
+  local pattern="$1"
+  local match
+  shopt -s nullglob
+  for match in $pattern; do
+    add_package_file "$match"
+  done
+  shopt -u nullglob
+}
+
+add_package_file chrome
+add_package_file headless_shell
 for optional in \
+  chrome_crashpad_handler \
+  chrome_sandbox \
+  headless_command_resources.pak \
+  headless_lib_data.pak \
+  headless_lib_strings.pak \
+  resources.pak \
+  chrome_100_percent.pak \
+  chrome_200_percent.pak \
   libEGL.so \
   libGLESv2.so \
   libvulkan.so.1 \
@@ -537,26 +588,32 @@ for optional in \
   icudtl.dat \
   locales; do
   if [[ -e "$optional" ]]; then
-    PACKAGE_FILES+=("$optional")
+    add_package_file "$optional"
   fi
 done
+add_package_glob "*.bin"
+add_package_glob "*.json"
+add_package_glob "*.pak"
+add_package_glob "*.so"
+add_package_glob "*.so.*"
+
 tar -czf "$OUT/clark-browser-linux-x64.tar.gz" "${PACKAGE_FILES[@]}"
 echo "[clark-build] Done. Artifact: $OUT/clark-browser-linux-x64.tar.gz"
 ls -lh "$OUT/clark-browser-linux-x64.tar.gz"
 
 # Stage 8: in-container smoke test ---------------------------------------------
-# Run linux_smoke.py against the freshly-built headless_shell binary. Talks
-# CDP directly via websocket-client; no agent-browser dep. Failure here is a
-# hard fail — the binary must pass before we publish.
+# Run linux_smoke.py against the freshly-built binary. Talks CDP directly via
+# websocket-client; no agent-browser dep. Failure here is a hard fail — the
+# binary must pass before we publish.
 cd "$WORK/build/src"
 if [[ "${CLARK_SKIP_SMOKE:-0}" != "1" ]]; then
   echo "[clark-build] Stage 8: in-container smoke test"
   python3 -m pip install --quiet --break-system-packages websocket-client 2>&1 | tail -3 || true
   SMOKE_SCRIPT="$WORK/clark-browser/tests/linux_smoke.py"
   if [[ -f "$SMOKE_SCRIPT" ]]; then
-    CLARK_BINARY_PATH="$WORK/build/src/out/Default/headless_shell" \
+    CLARK_BINARY_PATH="$WORK/build/src/out/Default/$CLARK_BROWSER_TARGET" \
       python3 "$SMOKE_SCRIPT" || {
-        echo "[clark-build] SMOKE FAILED — binary at $WORK/build/src/out/Default/headless_shell"
+        echo "[clark-build] SMOKE FAILED — binary at $WORK/build/src/out/Default/$CLARK_BROWSER_TARGET"
         exit 1
       }
     echo "[clark-build] Smoke passed."
