@@ -172,10 +172,14 @@ GCEOF
   bash "$DT/cipd_bin_setup.sh"
   export PATH="$DT:$PATH"
   # depot_tools' bundled gsutil path is brittle under Python 3.12 because its
-  # vendored dependency set still imports removed stdlib modules. Use the
-  # pip-packaged gsutil instead, but keep depot_tools/gclient otherwise.
-  pip_install "gsutil==5.35"
-  SYSTEM_GSUTIL="$(command -v gsutil)"
+  # vendored dependency set still imports removed stdlib modules. Use an
+  # isolated venv-backed gsutil instead, but keep depot_tools/gclient otherwise.
+  GSUTIL_VENV="$WORK/.clark-gsutil-venv"
+  if [[ ! -x "$GSUTIL_VENV/bin/gsutil" ]]; then
+    "$PYTHON" -m venv "$GSUTIL_VENV"
+    "$GSUTIL_VENV/bin/python" -m pip install --quiet "gsutil==5.35"
+  fi
+  SYSTEM_GSUTIL="$GSUTIL_VENV/bin/gsutil"
   python3 - "$DT/download_from_google_storage.py" "$SYSTEM_GSUTIL" <<'PY'
 import pathlib
 import re
@@ -197,6 +201,7 @@ PY
   # `--jobs=2` keeps us under chromium.googlesource.com's rate limit
   # (429 starts around 8+ concurrent fetches from one IP). Retry loop
   # backs off so transient 429s don't kill the build.
+  GCLIENT_OK=0
   for attempt in 1 2 3 4 5; do
     find build/src -path '*/.git/index.lock' -delete 2>/dev/null || true
     if (cd build/src/uc_staging && \
@@ -204,12 +209,17 @@ PY
          PATH="$DT:$PATH" \
          ./depot_tools/gclient sync -f -D -R --nohooks --sysroot=None \
                                     --jobs=2); then
+      GCLIENT_OK=1
       break
     fi
     sleep_for=$((attempt * 30))
     echo "[clark-build] gclient sync attempt $attempt failed; sleeping ${sleep_for}s..."
     sleep "$sleep_for"
   done
+  if [[ "$GCLIENT_OK" != "1" ]]; then
+    echo "[clark-build] gclient sync failed after retries" >&2
+    exit 3
+  fi
 fi
 
 # Stage 3: apply ungoogled patches ----------------------------------------------
