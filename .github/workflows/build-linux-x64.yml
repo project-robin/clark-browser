@@ -21,7 +21,7 @@ on:
         required: false
         default: ""
       runner:
-        description: "Runner size: ubuntu-22.04 (free, may OOD) or ubuntu-22.04-large"
+        description: "Runner label: ubuntu-22.04 or a configured larger/self-hosted label"
         required: false
         default: "ubuntu-22.04"
       target:
