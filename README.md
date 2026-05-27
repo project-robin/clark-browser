@@ -134,13 +134,17 @@ consistent for the whole session.
 
 Launcher defaults follow the host platform so font enumeration does not fight
 the claimed OS: Linux hosts default to a Linux profile, and macOS hosts default
-to macOS. To use a Windows profile from Linux, configure a Windows font pack
-with `CLARK_WINDOWS_FONTS_DIR=/path/to/fonts`; the launcher then adds both
-`--fingerprint-platform=windows` and `--fingerprint-fonts-dir=...`. Advanced
-callers can force a platform with `CLARK_FINGERPRINT_PLATFORM=windows|macos|linux`
-and pass a font directory with `CLARK_FINGERPRINT_FONTS_DIR=/path/to/fonts`.
-Windows profiles on non-Windows hosts require one of those font directory env
-vars.
+to macOS. To use a Windows profile from Linux, configure a licensed Windows font
+pack with `CLARK_WINDOWS_FONTS_DIR=/path/to/fonts`; the launcher validates that
+core families such as Arial, Calibri, and Segoe UI are present before adding
+`--fingerprint-platform=windows` and `--fingerprint-fonts-dir=...`. Linux font
+packs can be supplied with `CLARK_LINUX_FONTS_DIR=/path/to/fonts`, and the
+Python launcher exposes configured profile font directories to Linux Chromium
+through Fontconfig. Advanced callers can force a platform with
+`CLARK_FINGERPRINT_PLATFORM=windows|macos|linux` and pass a font directory with
+`CLARK_FINGERPRINT_FONTS_DIR=/path/to/fonts`. Windows profiles on non-Windows
+hosts require a valid Windows font directory. See `profiles/fonts/README.md`
+for profile-pack expectations.
 
 All fingerprint switches have seed-derived defaults when omitted. Pass
 `--fingerprint=<integer>` for a deterministic identity, or let the binary pick a
@@ -154,9 +158,10 @@ seed-stable values; direct CLI overrides are available for tight proxy pools.
 For proxied sessions, WebRTC routing must be coherent with the HTTP route too.
 Pass `webrtc_policy="proxy-coherent"` to the Python launcher, or set
 `CLARK_WEBRTC_POLICY=proxy-coherent`, to add
-`--force-webrtc-ip-handling-policy=disable_non_proxied_udp`. This is opt-in
-because forcing WebRTC through the configured proxy can hurt or break real-time
-media, especially when the proxy only supports TCP.
+`--force-webrtc-ip-handling-policy=disable_non_proxied_udp` and
+`--webrtc-ip-handling-policy=disable_non_proxied_udp`. This is opt-in because
+forcing WebRTC through the configured proxy can hurt or break real-time media,
+especially when the proxy only supports TCP.
 
 WebGPU is treated as a profile choice instead of a surprise runtime leak. The
 headless launcher default adds `--disable-features=WebGPU`, matching the common
@@ -209,13 +214,15 @@ pacer.click(page, "a")
 --fingerprint-downlink=          navigator.connection.downlink in Mbps
 --fingerprint-noise=             true | false  (canvas/audio noise on/off)
 --force-webrtc-ip-handling-policy=disable_non_proxied_udp
+--webrtc-ip-handling-policy=disable_non_proxied_udp
 --disable-features=WebGPU        default for headless launcher profiles
 ```
 
 ## Verified-working patches
 
-Confirmed firing in CDP-driven smoke tests against the built binary
-(`tests/linux_smoke.py`, `tests/integration_smoke.py`):
+Confirmed firing in smoke tests against the built binary
+(`tests/linux_smoke.py`, `tests/integration_smoke.py`,
+`tests/webrtc_proxy_smoke.py`):
 
 | Detection vector | Patched | Verification |
 |---|---|---|
@@ -228,6 +235,7 @@ Confirmed firing in CDP-driven smoke tests against the built binary
 | `navigator.maxTouchPoints` | matched to platform | `0` on `=windows` |
 | timezone / locale | from `--fingerprint-timezone` / `--fingerprint-locale` plus `--lang` | reaches Blink as set |
 | `navigator.connection` | seed/profile-derived network quality | nonzero RTT, plausible downlink/effectiveType |
+| WebRTC proxy coherence | opt-in `webrtc_policy="proxy-coherent"` | `tests/webrtc_proxy_smoke.py` verifies no private/local IP or direct STUN route |
 | WebGPU adapter info | absent by headless policy, or GPUAdapterInfo matches WebGL pool | `vendor/device/description` coherent when WebGPU is enabled |
 | User-Agent | no `HeadlessChrome` | full Chrome UA under `--user-agent=...` |
 | Audio fingerprint | seed-derived deterministic noise | two distinct seeds yield distinct audio FP |

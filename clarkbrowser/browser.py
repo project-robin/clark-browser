@@ -27,11 +27,14 @@ from .config import (
     WEBRTC_FORCE_IP_HANDLING_SWITCH,
     WEBRTC_IP_HANDLING_POLICY_SWITCH,
     WINDOWS_FONTS_DIR_ENV,
+    FINGERPRINT_FONTS_DIR_SWITCH,
     get_default_stealth_args,
     get_fingerprint_fonts_dir,
+    get_fontconfig_env_for_args,
     get_fingerprint_network_profile,
     normalize_webgpu_policy,
     normalize_webrtc_policy,
+    validate_fingerprint_fonts_dir,
 )
 from .download import ensure_binary
 from .hygiene import apply_launch_hygiene
@@ -129,11 +132,18 @@ def _cohere_platform_args(args: dict[str, str], user_keys: set[str]) -> None:
         fonts_dir = get_fingerprint_fonts_dir(fp_platform)
         if fonts_dir:
             args["--fingerprint-fonts-dir"] = f"--fingerprint-fonts-dir={fonts_dir}"
+    else:
+        fonts_dir = _arg_value(args, FINGERPRINT_FONTS_DIR_SWITCH)
+        if fonts_dir:
+            args[FINGERPRINT_FONTS_DIR_SWITCH] = (
+                f"{FINGERPRINT_FONTS_DIR_SWITCH}="
+                f"{validate_fingerprint_fonts_dir(fonts_dir, fp_platform)}"
+            )
 
     if (
         fp_platform == "windows"
         and host_platform.system() != "Windows"
-        and "--fingerprint-fonts-dir" not in args
+        and FINGERPRINT_FONTS_DIR_SWITCH not in args
     ):
         raise RuntimeError(
             "Windows fingerprint profiles require a configured font directory "
@@ -142,6 +152,21 @@ def _cohere_platform_args(args: dict[str, str], user_keys: set[str]) -> None:
             "--fingerprint-fonts-dir. Use "
             f"{FINGERPRINT_PLATFORM_ENV}=linux for the default Linux profile."
         )
+
+
+def _cohere_browser_env(args: list[str], kwargs: dict[str, Any]) -> dict[str, Any]:
+    font_env = get_fontconfig_env_for_args(args)
+    if not font_env:
+        return kwargs
+
+    launch_kwargs = dict(kwargs)
+    user_env = launch_kwargs.get("env")
+    env = os.environ.copy()
+    env.update(font_env)
+    if user_env:
+        env.update(user_env)
+    launch_kwargs["env"] = env
+    return launch_kwargs
 
 
 def _cohere_network_args(args: dict[str, str]) -> None:
@@ -167,6 +192,9 @@ def _cohere_webrtc_policy_args(
     if policy:
         args[WEBRTC_FORCE_IP_HANDLING_SWITCH] = (
             f"{WEBRTC_FORCE_IP_HANDLING_SWITCH}={policy}"
+        )
+        args[WEBRTC_IP_HANDLING_POLICY_SWITCH] = (
+            f"{WEBRTC_IP_HANDLING_POLICY_SWITCH}={policy}"
         )
 
 
@@ -259,6 +287,7 @@ def launch(
         headless,
     )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
+    kwargs = _cohere_browser_env(chrome_args, kwargs)
 
     logger.debug("launch(): headless=%s args=%d", headless, len(chrome_args))
     apply_launch_hygiene(logger, chrome_args, kwargs)
@@ -301,6 +330,7 @@ async def launch_async(
         headless,
     )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
+    kwargs = _cohere_browser_env(chrome_args, kwargs)
     apply_launch_hygiene(logger, chrome_args, kwargs)
 
     pw = await _import_async_playwright()().start()
@@ -445,6 +475,7 @@ def launch_persistent_context(
         headless,
     )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
+    kwargs = _cohere_browser_env(chrome_args, kwargs)
     apply_launch_hygiene(logger, chrome_args, kwargs)
 
     ctx_kwargs: dict[str, Any] = {}
@@ -500,6 +531,7 @@ async def launch_persistent_context_async(
         headless,
     )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
+    kwargs = _cohere_browser_env(chrome_args, kwargs)
     apply_launch_hygiene(logger, chrome_args, kwargs)
 
     ctx_kwargs: dict[str, Any] = {}

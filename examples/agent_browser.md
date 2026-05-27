@@ -153,9 +153,8 @@ layer. Any process that can reach the debugging port can control the browser.
   language, viewport, and IP between clicks.
 - Match proxy geography/type to timezone, locale, and network profile.
 - For HTTP proxy sessions, add
-  `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` or set
-  `CLARK_WEBRTC_POLICY=proxy-coherent` so WebRTC does not expose a different
-  non-proxied route.
+  `CLARK_WEBRTC_POLICY=proxy-coherent` so Clark sets both Chromium WebRTC
+  IP-handling switches and avoids exposing a different non-proxied route.
 - For headless sessions, keep WebGPU deliberately disabled
   (`--disable-features=WebGPU`) unless you are explicitly enabling it and using
   the coherent WebGPU adapter-info patch.

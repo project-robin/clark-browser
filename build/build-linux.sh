@@ -37,11 +37,19 @@ case "$HOST_ARCH" in
 esac
 echo "[clark-build] host arch: $HOST_ARCH (cipd platform: $CIPD_PLAT)"
 
-# When the host is arm64 but a previous run left amd64 toolchains in /work,
-# wipe them so the script re-fetches the right ones. Source tree is preserved.
-if [[ "$HOST_ARCH" == "arm64" && -f /work/build/src/buildtools/linux64/gn ]]; then
-  if ! file /work/build/src/buildtools/linux64/gn 2>/dev/null | grep -q ARM; then
-    echo "[clark-build] arm64 host detected but amd64 toolchains present; resetting..."
+# When a persistent /work volume moves between arm64 and amd64 containers,
+# wipe architecture-specific toolchains so the script re-fetches matching ones.
+if [[ -f /work/build/src/buildtools/linux64/gn ]]; then
+  GN_FILE="$(file /work/build/src/buildtools/linux64/gn 2>/dev/null || true)"
+  RESET_ARCH=0
+  if [[ "$HOST_ARCH" == "arm64" && "$GN_FILE" != *"ARM aarch64"* ]]; then
+    RESET_ARCH=1
+  elif [[ "$HOST_ARCH" == "amd64" && "$GN_FILE" != *"x86-64"* ]]; then
+    RESET_ARCH=1
+  fi
+  if [[ "$RESET_ARCH" == "1" ]]; then
+    echo "[clark-build] $HOST_ARCH host detected but cached toolchains differ; resetting..."
+    echo "[clark-build] cached gn: $GN_FILE"
     rm -rf /work/build/src/buildtools/linux64
     rm -rf /work/build/src/third_party/llvm-build
     rm -rf /work/build/src/third_party/rust-toolchain

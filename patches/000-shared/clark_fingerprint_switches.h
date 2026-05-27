@@ -70,7 +70,8 @@ extern const char kFingerprintTimezone[];
 // BCP-47 locale (e.g. "en-US"). Also drives --lang.
 extern const char kFingerprintLocale[];
 
-// Directory containing target-platform fonts. Plumbed into FontCache.
+// Directory containing target-platform fonts. The Python launcher exposes this
+// through Fontconfig on Linux; native FontCache plumbing is tracked separately.
 extern const char kFingerprintFontsDir[];
 
 // Geolocation lat,lon (e.g. "40.7128,-74.0060").

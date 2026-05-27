@@ -1,15 +1,15 @@
 # clark-browser Linux x86_64 build via GitHub Actions.
 #
 # Runs build-linux.sh natively on a linux/amd64 runner (no Rosetta, no
-# emulation). Uploads the headless_shell tar.gz as a workflow artifact
+# emulation). Uploads the target tar.gz as a workflow artifact
 # and, when triggered with a release tag input, attaches it to the GitHub
 # Release.
 #
 # The chromium tree needs ~80 GB of free disk. Free GitHub-hosted runners
 # only have ~14 GB. We free another ~30 GB via jlumbroso/free-disk-space
 # (removes pre-installed Android SDK / .NET / Haskell / Boost / etc) and
-# build the smaller headless_shell target instead of full chromium. If the
-# build still hits disk pressure, switch `runs-on` to a paid larger runner.
+# `target=headless_shell` remains available as a smaller rollback lane. Full
+# `target=chrome` builds may need a paid larger runner.
 
 name: build-linux-x64
 
@@ -24,6 +24,10 @@ on:
         description: "Runner size: ubuntu-22.04 (free, may OOD) or ubuntu-22.04-large"
         required: false
         default: "ubuntu-22.04"
+      target:
+        description: "Ninja target to build: headless_shell or chrome"
+        required: false
+        default: "chrome"
 
 permissions:
   contents: write   # needed for `gh release upload`
@@ -34,6 +38,7 @@ jobs:
     timeout-minutes: 360
     env:
       CLARK_UC_TAG: 148.0.7778.96-1
+      CLARK_BROWSER_TARGET: ${{ inputs.target }}
 
     steps:
       - name: Reclaim runner disk space (~30 GB)

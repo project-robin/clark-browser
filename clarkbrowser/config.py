@@ -7,7 +7,10 @@ from __future__ import annotations
 import os
 import platform
 import random
+import re
+from hashlib import sha256
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from ._version import __version__
 
@@ -65,6 +68,7 @@ PLATFORM_CLIENT_HINT_VERSIONS: dict[str, str] = {
 FINGERPRINT_PLATFORM_ENV = "CLARK_FINGERPRINT_PLATFORM"
 FINGERPRINT_FONTS_DIR_ENV = "CLARK_FINGERPRINT_FONTS_DIR"
 WINDOWS_FONTS_DIR_ENV = "CLARK_WINDOWS_FONTS_DIR"
+LINUX_FONTS_DIR_ENV = "CLARK_LINUX_FONTS_DIR"
 FINGERPRINT_NETWORK_PROFILE_ENV = "CLARK_FINGERPRINT_NETWORK_PROFILE"
 NETWORK_PROFILES = {"desktop", "residential", "datacenter", "mobile", "slow"}
 WEBRTC_POLICY_ENV = "CLARK_WEBRTC_POLICY"
@@ -113,6 +117,20 @@ WEBGPU_POLICY_ALIASES = {
     "true": "coherent",
     "1": "coherent",
 }
+FONT_FILE_SUFFIXES = {".ttf", ".ttc", ".otf"}
+FINGERPRINT_FONTS_DIR_SWITCH = "--fingerprint-fonts-dir"
+WINDOWS_REQUIRED_FONT_FAMILIES: dict[str, tuple[str, ...]] = {
+    "Arial": ("arial",),
+    "Calibri": ("calibri",),
+    "Segoe UI": ("segoe",),
+}
+LINUX_RECOMMENDED_FONT_FAMILIES = (
+    "DejaVu Sans",
+    "Liberation Sans",
+    "Noto Sans",
+    "Ubuntu",
+    "Ubuntu Mono",
+)
 
 
 def _get_env(name: str) -> str | None:
@@ -121,6 +139,64 @@ def _get_env(name: str) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def _font_files(fonts_dir: Path) -> list[Path]:
+    return [
+        path for path in fonts_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in FONT_FILE_SUFFIXES
+    ]
+
+
+def _font_stem_key(path: Path) -> str:
+    return re.sub(r"[^a-z0-9]+", "", path.stem.lower())
+
+
+def validate_fingerprint_fonts_dir(
+    fonts_dir: str | os.PathLike[str],
+    fp_platform: str | None,
+) -> str:
+    """Validate a configured target-platform font directory.
+
+    This catches the high-signal incoherence where a non-Windows host claims a
+    Windows profile but points the browser at a small Linux font directory.
+    """
+    path = Path(fonts_dir).expanduser()
+    if not path.is_dir():
+        raise RuntimeError(
+            f"Fingerprint font directory does not exist or is not a directory: "
+            f"{path}"
+        )
+
+    files = _font_files(path)
+    if not files:
+        raise RuntimeError(
+            f"Fingerprint font directory contains no .ttf, .ttc, or .otf "
+            f"files: {path}"
+        )
+
+    platform_key = (fp_platform or get_default_fingerprint_platform()).lower()
+    if platform_key == "windows":
+        stems = {_font_stem_key(file) for file in files}
+        missing = [
+            family
+            for family, prefixes in WINDOWS_REQUIRED_FONT_FAMILIES.items()
+            if not any(
+                stem.startswith(prefix)
+                for stem in stems
+                for prefix in prefixes
+            )
+        ]
+        if missing:
+            raise RuntimeError(
+                "Windows fingerprint profiles require a Windows font pack. "
+                f"{path} is missing core families: {', '.join(missing)}. "
+                f"Set {WINDOWS_FONTS_DIR_ENV} to a directory containing "
+                "licensed Windows fonts, or use "
+                f"{FINGERPRINT_PLATFORM_ENV}=linux."
+            )
+
+    return os.fspath(path)
 
 
 def get_default_fingerprint_platform() -> str:
@@ -148,12 +224,56 @@ def get_default_fingerprint_platform() -> str:
 
 def get_fingerprint_fonts_dir(fp_platform: str | None = None) -> str | None:
     """Return an optional platform font directory passed to Chromium."""
+    platform_key = (fp_platform or get_default_fingerprint_platform()).lower()
     explicit = _get_env(FINGERPRINT_FONTS_DIR_ENV)
     if explicit:
-        return explicit
-    if (fp_platform or get_default_fingerprint_platform()) == "windows":
-        return _get_env(WINDOWS_FONTS_DIR_ENV)
+        return validate_fingerprint_fonts_dir(explicit, platform_key)
+    if platform_key == "windows":
+        windows_dir = _get_env(WINDOWS_FONTS_DIR_ENV)
+        if windows_dir:
+            return validate_fingerprint_fonts_dir(windows_dir, platform_key)
+        return None
+    if platform_key == "linux":
+        linux_dir = _get_env(LINUX_FONTS_DIR_ENV)
+        if linux_dir:
+            return validate_fingerprint_fonts_dir(linux_dir, platform_key)
     return None
+
+
+def get_fingerprint_fonts_dir_from_args(args: list[str]) -> str | None:
+    for arg in args:
+        if arg.startswith(f"{FINGERPRINT_FONTS_DIR_SWITCH}="):
+            return arg.split("=", 1)[1] or None
+    return None
+
+
+def get_fontconfig_env_for_fonts_dir(fonts_dir: str | None) -> dict[str, str]:
+    """Return Linux Fontconfig env needed to expose a profile font directory."""
+    if platform.system() != "Linux" or not fonts_dir:
+        return {}
+
+    fonts_path = Path(fonts_dir).expanduser()
+    digest = sha256(os.fspath(fonts_path).encode("utf-8")).hexdigest()[:16]
+    conf_dir = get_cache_dir() / "fontconfig"
+    conf_dir.mkdir(parents=True, exist_ok=True)
+    conf_path = conf_dir / f"profile-fonts-{digest}.conf"
+    config = (
+        '<?xml version="1.0"?>\n'
+        '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
+        '<fontconfig>\n'
+        '  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>\n'
+        f"  <dir>{escape(os.fspath(fonts_path))}</dir>\n"
+        "</fontconfig>\n"
+    )
+    if not conf_path.exists() or conf_path.read_text() != config:
+        conf_path.write_text(config)
+    return {"FONTCONFIG_FILE": os.fspath(conf_path)}
+
+
+def get_fontconfig_env_for_args(args: list[str]) -> dict[str, str]:
+    return get_fontconfig_env_for_fonts_dir(
+        get_fingerprint_fonts_dir_from_args(args)
+    )
 
 
 def get_fingerprint_network_profile() -> str | None:

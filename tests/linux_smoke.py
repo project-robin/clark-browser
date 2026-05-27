@@ -14,7 +14,7 @@ What it covers:
  1. JS-visible fingerprint vectors (navigator.platform, userAgent,
     hardwareConcurrency, maxTouchPoints, timezone, locale, languages,
     plugins.length, window.chrome, webdriver, UA Client Hints) when launched with
-    --fingerprint-platform=windows + matched --user-agent.
+    the selected Linux or Windows font/platform profile.
  2. Network Information values from the configured datacenter profile.
  3. WebGPU is either intentionally unavailable or coherent with WebGL.
  4. Audio fingerprint differential across two seeds.
@@ -35,6 +35,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Iterator
+from xml.sax.saxutils import escape
 
 try:
     import websocket  # type: ignore  # websocket-client
@@ -49,6 +50,25 @@ if not BINARY or not Path(BINARY).exists():
 
 PORT = int(os.environ.get("CLARK_CDP_PORT", "9444"))
 PROFILE = Path("/tmp/clark-linux-smoke-profile")
+WINDOWS_CORE_FONTS = ("Arial", "Segoe UI", "Calibri")
+WINDOWS_FONT_PROBES = {
+    "Arial": "12px Arial",
+    "Segoe UI": '12px "Segoe UI"',
+    "Calibri": "12px Calibri",
+}
+LINUX_FONT_CANDIDATES = (
+    "DejaVu Sans",
+    "Liberation Sans",
+    "Noto Sans",
+    "Ubuntu",
+    "Ubuntu Mono",
+)
+LINUX_FONT_PROBES = {family: f'12px "{family}"' for family in LINUX_FONT_CANDIDATES}
+WINDOWS_FONTS_DIR = (os.environ.get("CLARK_WINDOWS_FONTS_DIR") or "").strip()
+SMOKE_FONT_PROFILE = os.environ.get(
+    "CLARK_SMOKE_FONT_PROFILE",
+    "windows" if WINDOWS_FONTS_DIR else "linux",
+).strip().lower()
 
 
 class TrustedPageHandler(BaseHTTPRequestHandler):
@@ -112,6 +132,29 @@ def cdp_navigate(url: str) -> None:
         ws.close()
 
 
+def _arg_value(args: tuple[str, ...], key: str) -> str | None:
+    prefix = f"{key}="
+    for arg in args:
+        if arg.startswith(prefix):
+            return arg.split("=", 1)[1]
+    return None
+
+
+def _fontconfig_env(fonts_dir: str | None) -> dict[str, str]:
+    if not fonts_dir:
+        return {}
+    config_path = PROFILE / "fontconfig-smoke.conf"
+    config_path.write_text(
+        '<?xml version="1.0"?>\n'
+        '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
+        '<fontconfig>\n'
+        '  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>\n'
+        f"  <dir>{escape(fonts_dir)}</dir>\n"
+        "</fontconfig>\n"
+    )
+    return {"FONTCONFIG_FILE": os.fspath(config_path)}
+
+
 @contextmanager
 def trusted_local_page() -> Iterator[tuple[str, str]]:
     server = ThreadingHTTPServer(("127.0.0.1", 0), TrustedPageHandler)
@@ -142,7 +185,11 @@ def launch(*args: str) -> Iterator[None]:
         *args,
         "about:blank",
     ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    env = os.environ.copy()
+    env.update(_fontconfig_env(_arg_value(args, "--fingerprint-fonts-dir")))
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env
+    )
     try:
         for _ in range(40):
             try:
@@ -178,12 +225,56 @@ def json_ok(actual: str, predicate) -> bool:
         return False
 
 
+def _font_profile_args(seed: str) -> tuple[list[str], dict[str, str]]:
+    if SMOKE_FONT_PROFILE == "windows":
+        if not WINDOWS_FONTS_DIR:
+            print(
+                "ERROR: CLARK_SMOKE_FONT_PROFILE=windows requires "
+                "CLARK_WINDOWS_FONTS_DIR",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        return [
+            f"--fingerprint={seed}",
+            "--fingerprint-platform=windows",
+            "--fingerprint-platform-version=19.0.0",
+            f"--fingerprint-fonts-dir={WINDOWS_FONTS_DIR}",
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/148.0.0.0 Safari/537.36",
+        ], {
+            "label": "Windows",
+            "navigator_platform": "Win32",
+            "ua_marker": "Windows NT 10.0",
+            "ua_ch_platform": "Windows",
+            "ua_ch_platform_version": "19.0.0",
+        }
+    if SMOKE_FONT_PROFILE != "linux":
+        print(
+            f"ERROR: unsupported CLARK_SMOKE_FONT_PROFILE={SMOKE_FONT_PROFILE!r}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return [
+        f"--fingerprint={seed}",
+        "--fingerprint-platform=linux",
+        "--user-agent=Mozilla/5.0 (X11; Linux x86_64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/148.0.0.0 Safari/537.36",
+    ], {
+        "label": "Linux",
+        "navigator_platform": "Linux x86_64",
+        "ua_marker": "X11; Linux x86_64",
+        "ua_ch_platform": "Linux",
+        "ua_ch_platform_version": "",
+    }
+
+
 def main() -> int:
     seed = "42069"
+    profile_args, profile = _font_profile_args(seed)
     args = [
-        f"--fingerprint={seed}",
-        "--fingerprint-platform=windows",
-        "--fingerprint-platform-version=19.0.0",
+        *profile_args,
         "--fingerprint-brand=Chrome",
         "--fingerprint-brand-version=148.0.0.0",
         "--fingerprint-hardware-concurrency=12",
@@ -196,17 +287,18 @@ def main() -> int:
         "--fingerprinting-client-rects-noise",
         "--fingerprinting-canvas-measuretext-noise",
         "--fingerprinting-canvas-image-data-noise",
-        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     ]
 
-    print("=== JS-surface vectors (Windows fingerprint) ===")
+    print(f"=== JS-surface vectors ({profile['label']} fingerprint) ===")
     with trusted_local_page() as (trusted_url, trusted_origin), \
             launch(*args, f"--unsafely-treat-insecure-origin-as-secure={trusted_origin}"):
         time.sleep(0.5)
         expect("navigator.webdriver", cdp_eval("navigator.webdriver"), lambda v: v == "false", "false")
         expect("navigator.plugins.length", cdp_eval("navigator.plugins.length"), lambda v: v == "5", "5")
         expect("typeof window.chrome", cdp_eval("typeof window.chrome"), lambda v: v == '"object"', '"object"')
-        expect("navigator.platform", cdp_eval("navigator.platform"), lambda v: v == '"Win32"', '"Win32"')
+        expect("navigator.platform", cdp_eval("navigator.platform"),
+               lambda v: v == json.dumps(profile["navigator_platform"]),
+               json.dumps(profile["navigator_platform"]))
         expect("hardwareConcurrency", cdp_eval("navigator.hardwareConcurrency"), lambda v: v == "12", "12")
         expect("maxTouchPoints", cdp_eval("navigator.maxTouchPoints"), lambda v: v == "0", "0")
         screen_state = cdp_eval("""
@@ -245,6 +337,29 @@ def main() -> int:
               return (await navigator.permissions.query({name: 'notifications'})).state;
             })()
         """), lambda v: v == '"prompt"', '"prompt"')
+        font_probes = {**WINDOWS_FONT_PROBES, **LINUX_FONT_PROBES}
+        font_state = cdp_eval(f"""
+            (() => {{
+              const probes = {json.dumps(font_probes)};
+              const checks = {{}};
+              for (const [family, css] of Object.entries(probes)) {{
+                checks[family] = document.fonts.check(css);
+              }}
+              return checks;
+            }})()
+        """)
+        if SMOKE_FONT_PROFILE == "windows":
+            expect("Windows font pack", font_state,
+                   lambda v: json_ok(v, lambda fonts:
+                       all(fonts.get(family) is True
+                           for family in WINDOWS_CORE_FONTS)),
+                   "Arial, Segoe UI, and Calibri present")
+        else:
+            expect("Linux font profile", font_state,
+                   lambda v: json_ok(v, lambda fonts:
+                       any(fonts.get(family) is True
+                           for family in LINUX_FONT_CANDIDATES)),
+                   "at least one common Linux UI font present")
         network_state = cdp_eval("""
             ({
               effectiveType: navigator.connection.effectiveType,
@@ -318,9 +433,9 @@ def main() -> int:
                    )),
                "unsupported with reason, or WebGPU vendor/description matches WebGL")
         ua = cdp_eval("navigator.userAgent")
-        expect("UA = windows", ua,
-               lambda v: "Windows NT 10.0" in v and "HeadlessChrome" not in v,
-               "Windows NT 10.0 (no Headless)")
+        expect(f"UA = {profile['label'].lower()}", ua,
+               lambda v: profile["ua_marker"] in v and "HeadlessChrome" not in v,
+               f"{profile['ua_marker']} (no Headless)")
         cdp_navigate(trusted_url)
         time.sleep(0.5)
         expect("UA-CH secure context", cdp_eval("window.isSecureContext"), lambda v: v == "true", "true")
@@ -339,13 +454,17 @@ def main() -> int:
               };
             })()
         """)
-        expect("UA-CH = windows/chrome", ua_ch,
-               lambda v: '"platform": "Windows"' in v and
-                         '"platformVersion": "19.0.0"' in v and
-                         '"architecture": "x86"' in v and
-                         '"bitness": "64"' in v and
-                         "Google Chrome" in v,
-               "Windows + Google Chrome client hints")
+        expect(f"UA-CH = {profile['label'].lower()}/chrome", ua_ch,
+               lambda v: json_ok(v, lambda high:
+                   isinstance(high, dict) and
+                   high.get("platform") == profile["ua_ch_platform"] and
+                   high.get("platformVersion") ==
+                   profile["ua_ch_platform_version"] and
+                   high.get("architecture") == "x86" and
+                   high.get("bitness") == "64" and
+                   "Google Chrome" in high.get("brands", []) and
+                   "Google Chrome" in high.get("fullBrands", [])),
+               f"{profile['label']} + Google Chrome client hints")
 
     print("\n=== Audio fingerprint differential (seed 1 vs 42069) ===")
     audio_html = (
@@ -359,7 +478,8 @@ def main() -> int:
     )
     seeds = []
     for s in ("1", "42069"):
-        with launch(f"--fingerprint={s}", "--fingerprint-platform=windows"):
+        seed_profile_args, _ = _font_profile_args(s)
+        with launch(*seed_profile_args):
             time.sleep(0.5)
             cdp_navigate(audio_html)
             time.sleep(2)

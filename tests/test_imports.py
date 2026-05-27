@@ -5,6 +5,26 @@
 from __future__ import annotations
 
 
+def _font_pack(tmp_path, name: str, files: list[str]) -> str:
+    fonts_dir = tmp_path / name
+    fonts_dir.mkdir()
+    for filename in files:
+        (fonts_dir / filename).write_bytes(b"dummy font")
+    return str(fonts_dir)
+
+
+def _windows_font_pack(tmp_path) -> str:
+    return _font_pack(
+        tmp_path,
+        "windows-fonts",
+        ["arial.ttf", "calibri.ttf", "segoeui.ttf"],
+    )
+
+
+def _linux_font_pack(tmp_path) -> str:
+    return _font_pack(tmp_path, "linux-fonts", ["DejaVuSans.ttf"])
+
+
 def test_imports() -> None:
     import clarkbrowser  # noqa: F401
     from clarkbrowser import (  # noqa: F401
@@ -54,34 +74,60 @@ def test_linux_default_profile_matches_linux_fonts(monkeypatch) -> None:
     assert not any(a.startswith("--fingerprint-fonts-dir=") for a in args)
 
 
-def test_linux_windows_profile_requires_font_pack(monkeypatch) -> None:
+def test_linux_windows_profile_requires_font_pack(monkeypatch, tmp_path) -> None:
     from clarkbrowser import config
     monkeypatch.setattr(config.platform, "system", lambda: "Linux")
     monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
     monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
-    monkeypatch.setenv("CLARK_WINDOWS_FONTS_DIR", "/opt/clark/fonts/windows")
+    windows_fonts = _windows_font_pack(tmp_path)
+    monkeypatch.setenv("CLARK_WINDOWS_FONTS_DIR", windows_fonts)
     monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
 
     args = config.get_default_stealth_args()
 
     assert "--fingerprint-platform=windows" in args
     assert "--fingerprint-platform-version=19.0.0" in args
-    assert "--fingerprint-fonts-dir=/opt/clark/fonts/windows" in args
+    assert f"--fingerprint-fonts-dir={windows_fonts}" in args
     assert any("Windows NT 10.0" in a for a in args)
 
 
-def test_fingerprint_platform_env_overrides_default(monkeypatch) -> None:
+def test_linux_profile_uses_linux_font_pack_when_configured(
+    monkeypatch, tmp_path
+) -> None:
     from clarkbrowser import config
     monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    linux_fonts = _linux_font_pack(tmp_path)
+    cache_dir = tmp_path / "cache"
+    monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_WINDOWS_FONTS_DIR", raising=False)
+    monkeypatch.setenv("CLARK_LINUX_FONTS_DIR", linux_fonts)
+    monkeypatch.setenv("CLARK_CACHE_DIR", str(cache_dir))
+    monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
+
+    args = config.get_default_stealth_args()
+    font_env = config.get_fontconfig_env_for_args(args)
+
+    assert "--fingerprint-platform=linux" in args
+    assert f"--fingerprint-fonts-dir={linux_fonts}" in args
+    assert "FONTCONFIG_FILE" in font_env
+    with open(font_env["FONTCONFIG_FILE"]) as config_file:
+        assert linux_fonts in config_file.read()
+
+
+def test_fingerprint_platform_env_overrides_default(monkeypatch, tmp_path) -> None:
+    from clarkbrowser import config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    windows_fonts = _windows_font_pack(tmp_path)
     monkeypatch.setenv("CLARK_FINGERPRINT_PLATFORM", "windows")
-    monkeypatch.setenv("CLARK_FINGERPRINT_FONTS_DIR", "/profiles/win-fonts")
+    monkeypatch.setenv("CLARK_FINGERPRINT_FONTS_DIR", windows_fonts)
     monkeypatch.delenv("CLARK_WINDOWS_FONTS_DIR", raising=False)
     monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
 
     args = config.get_default_stealth_args()
 
     assert "--fingerprint-platform=windows" in args
-    assert "--fingerprint-fonts-dir=/profiles/win-fonts" in args
+    assert f"--fingerprint-fonts-dir={windows_fonts}" in args
 
 
 def test_windows_profile_without_fonts_is_rejected(monkeypatch) -> None:
@@ -97,17 +143,65 @@ def test_windows_profile_without_fonts_is_rejected(monkeypatch) -> None:
         config.get_default_stealth_args()
 
 
-def test_user_platform_override_rewrites_matched_identity(monkeypatch) -> None:
+def test_windows_fonts_dir_must_exist(monkeypatch, tmp_path) -> None:
+    import pytest
+    from clarkbrowser import config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
+    monkeypatch.setenv("CLARK_WINDOWS_FONTS_DIR", str(tmp_path / "missing"))
+    monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
+
+    with pytest.raises(RuntimeError, match="does not exist"):
+        config.get_default_stealth_args()
+
+
+def test_windows_fonts_dir_must_contain_font_files(monkeypatch, tmp_path) -> None:
+    import pytest
+    from clarkbrowser import config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    empty_fonts = tmp_path / "empty-windows-fonts"
+    empty_fonts.mkdir()
+    monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
+    monkeypatch.setenv("CLARK_WINDOWS_FONTS_DIR", str(empty_fonts))
+    monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
+
+    with pytest.raises(RuntimeError, match="contains no"):
+        config.get_default_stealth_args()
+
+
+def test_windows_profile_with_linux_fonts_is_rejected(monkeypatch, tmp_path) -> None:
+    import pytest
+    from clarkbrowser import config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    linux_fonts = _linux_font_pack(tmp_path)
+    monkeypatch.setenv("CLARK_FINGERPRINT_PLATFORM", "windows")
+    monkeypatch.setenv("CLARK_FINGERPRINT_FONTS_DIR", linux_fonts)
+    monkeypatch.delenv("CLARK_WINDOWS_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
+
+    with pytest.raises(RuntimeError, match="missing core families"):
+        config.get_default_stealth_args()
+
+
+def test_user_platform_override_rewrites_matched_identity(
+    monkeypatch, tmp_path
+) -> None:
     from clarkbrowser import browser, config
     monkeypatch.setattr(config.platform, "system", lambda: "Linux")
     monkeypatch.setattr(browser.host_platform, "system", lambda: "Linux")
+    windows_fonts = _windows_font_pack(tmp_path)
     monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
     monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
     monkeypatch.delenv("CLARK_WINDOWS_FONTS_DIR", raising=False)
     monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
 
     args = browser._resolve_args(
-        ["--fingerprint-platform=windows", "--fingerprint-fonts-dir=/fonts/win"],
+        [
+            "--fingerprint-platform=windows",
+            f"--fingerprint-fonts-dir={windows_fonts}",
+        ],
         True,
         None,
         None,
@@ -119,7 +213,7 @@ def test_user_platform_override_rewrites_matched_identity(monkeypatch) -> None:
 
     assert "--fingerprint-platform=windows" in args
     assert "--fingerprint-platform-version=19.0.0" in args
-    assert "--fingerprint-fonts-dir=/fonts/win" in args
+    assert f"--fingerprint-fonts-dir={windows_fonts}" in args
     assert any("Windows NT 10.0" in a for a in args)
     assert not any("X11; Linux x86_64" in a for a in args)
 
@@ -146,6 +240,54 @@ def test_user_windows_platform_without_fonts_is_rejected(monkeypatch) -> None:
             None,
             True,
         )
+
+
+def test_user_windows_platform_with_linux_fonts_is_rejected(
+    monkeypatch, tmp_path
+) -> None:
+    import pytest
+    from clarkbrowser import browser, config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(browser.host_platform, "system", lambda: "Linux")
+    linux_fonts = _linux_font_pack(tmp_path)
+    monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_WINDOWS_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
+    monkeypatch.delenv("CLARK_WEBRTC_POLICY", raising=False)
+
+    with pytest.raises(RuntimeError, match="missing core families"):
+        browser._resolve_args(
+            [
+                "--fingerprint-platform=windows",
+                f"--fingerprint-fonts-dir={linux_fonts}",
+            ],
+            True,
+            None,
+            None,
+            None,
+            None,
+            None,
+            True,
+        )
+
+
+def test_launch_env_adds_fontconfig_for_profile_fonts(monkeypatch, tmp_path) -> None:
+    from clarkbrowser import browser, config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    linux_fonts = _linux_font_pack(tmp_path)
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setenv("CLARK_CACHE_DIR", str(cache_dir))
+
+    kwargs = browser._cohere_browser_env(
+        [f"--fingerprint-fonts-dir={linux_fonts}"],
+        {},
+    )
+
+    assert "env" in kwargs
+    assert "FONTCONFIG_FILE" in kwargs["env"]
+    with open(kwargs["env"]["FONTCONFIG_FILE"]) as config_file:
+        assert linux_fonts in config_file.read()
 
 
 def test_network_profile_env_adds_default_arg(monkeypatch) -> None:
@@ -193,6 +335,7 @@ def test_webrtc_proxy_coherent_policy_adds_chromium_arg(monkeypatch) -> None:
     )
 
     assert "--force-webrtc-ip-handling-policy=disable_non_proxied_udp" in args
+    assert "--webrtc-ip-handling-policy=disable_non_proxied_udp" in args
 
 
 def test_webrtc_policy_env_is_opt_in(monkeypatch) -> None:
@@ -209,6 +352,7 @@ def test_webrtc_policy_env_is_opt_in(monkeypatch) -> None:
     assert not any(
         a.startswith("--force-webrtc-ip-handling-policy=") for a in args
     )
+    assert not any(a.startswith("--webrtc-ip-handling-policy=") for a in args)
 
 
 def test_webrtc_policy_env_adds_proxy_coherent_arg(monkeypatch) -> None:
@@ -223,6 +367,7 @@ def test_webrtc_policy_env_adds_proxy_coherent_arg(monkeypatch) -> None:
     args = browser._resolve_args([], True, None, None, None, None, None, True)
 
     assert "--force-webrtc-ip-handling-policy=disable_non_proxied_udp" in args
+    assert "--webrtc-ip-handling-policy=disable_non_proxied_udp" in args
 
 
 def test_user_webrtc_policy_arg_wins(monkeypatch) -> None:
@@ -247,6 +392,7 @@ def test_user_webrtc_policy_arg_wins(monkeypatch) -> None:
 
     assert "--force-webrtc-ip-handling-policy=default" in args
     assert "--force-webrtc-ip-handling-policy=disable_non_proxied_udp" not in args
+    assert "--webrtc-ip-handling-policy=disable_non_proxied_udp" not in args
 
 
 def test_invalid_webrtc_policy_is_rejected(monkeypatch) -> None:

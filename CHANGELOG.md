@@ -16,6 +16,9 @@
   from pairing with a tiny Linux font set.
 - Added `CLARK_FINGERPRINT_PLATFORM`, `CLARK_FINGERPRINT_FONTS_DIR`, and
   `CLARK_WINDOWS_FONTS_DIR` launcher hooks for explicit platform/font profiles.
+- Added `CLARK_LINUX_FONTS_DIR`, target-platform font directory validation, and
+  Linux Fontconfig profile generation so configured font packs are visible to
+  Chromium instead of only being passed as audit metadata.
 - `Notification.permission` now returns `default` under Clark fingerprint mode,
   matching `permissions.query({name: "notifications"})` returning `prompt`.
 - Added `patches/0051-network-information-profile.patch` so
@@ -23,8 +26,9 @@
   seed-stable network profiles instead of leaking host NQE values like `rtt=0`.
 - Added opt-in proxy-coherent WebRTC routing via `webrtc_policy="proxy-coherent"`
   or `CLARK_WEBRTC_POLICY=proxy-coherent`, mapping to Chromium's
-  `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` so proxied
-  sessions do not leak a separate non-proxied UDP route.
+  `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` and
+  `--webrtc-ip-handling-policy=disable_non_proxied_udp` so proxied sessions do
+  not leak a separate non-proxied UDP route.
 - Added `patches/0049-webgpu-adapter-info-coherent.patch` so
   `GPUAdapter.info` and `GPUDevice.adapterInfo` match the WebGL GPU pool when
   WebGPU is enabled. Headless launches now deliberately disable WebGPU by
@@ -38,6 +42,10 @@
   the real `chrome` binary plus a `headless_shell` compatibility launcher.
 - The Linux Docker build runner now defaults to host memory and keeps
   `CLARK_LINUX_BUILD_MEMORY` as an opt-in cap for constrained local builds.
+- The Linux Docker runner now builds and runs the same amd64 platform image,
+  resets stale architecture-specific toolchains in persistent build volumes,
+  and the GitHub Actions Linux build can dispatch either `chrome` or
+  `headless_shell` via the `target` input.
 
 ## 0.2.0 — fingerprint plumbing fixes + audio noise (May 2026)
 
@@ -125,10 +133,10 @@ with a Windows fingerprint and swiftshader-WebGL enabled.
 - Audio noise covers only `AudioBuffer::getChannelData` and `copyFromChannel`.
   `AnalyserNode.getFloatFrequencyData()` and `MediaStreamAudioSourceNode`
   routes are not yet perturbed.
-- Font enumeration (patch series #29-#31) still uses host fonts. The launcher
-  now avoids claiming Windows on Linux unless a Windows font directory is
-  configured, but full FontCache plumbing for packaged target-platform fonts is
-  still deferred.
+- Font enumeration still depends on real installed/profile fonts. The launcher
+  validates configured font dirs and exposes them through Fontconfig on Linux,
+  but full native FontCache plumbing and synthetic fallback metrics are still
+  deferred.
 - TLS / ClientHello fingerprint (#40-#44) not patched. Requires BoringSSL
   customization (or an external utls-style proxy) to alter JA3/JA4.
 - WebGPU adapter info (#49) is wired when WebGPU is enabled, but live

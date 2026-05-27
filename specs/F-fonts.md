@@ -104,8 +104,30 @@ Options:
 - Use look-alike free alternatives (Liberation Sans for Arial, etc.) —
   CHEAPER but distinct enough that detection sites can fingerprint the
   Liberation glyphs
-- Ship a `--fingerprint-platform=linux` profile and use Linux Mesa font
-  set (no licensing issue, narrower target
+- Ship a `--fingerprint-platform=linux` profile and use a Linux desktop font
+  set (no licensing issue, narrower target)
+
+## Current implementation
+
+The launcher now treats font packs as part of the selected profile rather than
+best-effort metadata:
+
+- Linux hosts default to `--fingerprint-platform=linux` unless a Windows font
+  pack is explicitly configured.
+- `CLARK_WINDOWS_FONTS_DIR` is required for Windows profiles on non-Windows
+  hosts and must contain core Windows families: Arial, Calibri, and Segoe UI.
+- `CLARK_LINUX_FONTS_DIR` can point at a Linux profile font directory. The
+  Python launcher writes a small Fontconfig file so Linux Chromium can resolve
+  fonts from that directory.
+- `CLARK_FINGERPRINT_FONTS_DIR` remains the advanced override, but it is
+  validated against the claimed platform before launch.
+- The Linux smoke uses a Linux-looking profile by default and switches to the
+  Windows font assertions only when `CLARK_SMOKE_FONT_PROFILE=windows` and a
+  valid Windows font pack are configured.
+
+Native FontCache search-path plumbing and synthesized fallback metrics remain
+future work (#29 and #31). Until then, target-platform coherence depends on
+installing or mounting real profile fonts.
 
 ## Effort
 

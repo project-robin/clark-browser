@@ -120,7 +120,7 @@ collapse to **enabling and re-keying** existing features — see specs.
 
 | # | Patch | Idea source | Category | Status |
 |---|---|---|---|---|
-| policy | opt-in proxy-coherent WebRTC route policy | RFC 8828 + Chromium IP handling policy | 🟢 | launcher |
+| policy | opt-in proxy-coherent WebRTC route policy | RFC 8828 + Chromium IP handling policy | 🟢 | launcher + smoke |
 | 38 | `--fingerprint-webrtc-ip` replaces ICE host candidate | webrtc `BasicNetworkManager` upstream | 🟠 | spec |
 | 39 | mDNS host-candidate enabled (consistent with real Chrome) | RFC 8835 | 🟢 | spec |
 
