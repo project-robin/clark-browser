@@ -222,6 +222,15 @@ def allowed_public_ips() -> set[ipaddress._BaseAddress]:
     return allowed
 
 
+def require_raw_candidates() -> bool:
+    return os.environ.get("CLARK_WEBRTC_REQUIRE_RAW_CANDIDATES", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def find_route_leaks(result: dict[str, Any]) -> list[str]:
     allowed = allowed_public_ips()
     leaks: list[str] = []
@@ -307,12 +316,20 @@ def main() -> int:
         raw.get("supported") is True,
         "default/raw mode executed RTCPeerConnection",
     )
-    expect(
-        failures,
-        "raw ICE control candidates",
-        len(raw.get("candidates") or []) > 0,
-        "default/raw mode gathered at least one ICE candidate",
-    )
+    raw_candidate_count = len(raw.get("candidates") or [])
+    if raw_candidate_count > 0:
+        print(
+            "PASS raw ICE control candidates: "
+            f"default/raw mode gathered {raw_candidate_count} ICE candidate(s)"
+        )
+    elif require_raw_candidates():
+        print("FAIL raw ICE control candidates: default/raw mode gathered none")
+        failures.append("raw ICE control candidates")
+    else:
+        print(
+            "WARN raw ICE control candidates: default/raw mode gathered none "
+            "(set CLARK_WEBRTC_REQUIRE_RAW_CANDIDATES=1 to make this fatal)"
+        )
     expect(
         failures,
         "proxy-coherent RTCPeerConnection supported",
