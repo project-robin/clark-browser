@@ -631,7 +631,7 @@ def test_download_url_uses_current_stealth_release(monkeypatch) -> None:
     assert (
         config.get_download_url()
         == "https://github.com/clark-labs-inc/clark-browser/releases/download/"
-        "chromium-v148.0.7778.96-stealth3/clark-browser-linux-x64.tar.gz"
+        "chromium-v148.0.7778.96-stealth4/clark-browser-linux-x64.tar.gz"
     )
 
 
