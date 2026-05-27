@@ -97,7 +97,8 @@ jobs:
             libxshmfence-dev libxslt1-dev libxss-dev libxtst-dev \
             libz3-dev mesa-common-dev uuid-dev \
             bison flex gperf xz-utils zip unzip rsync file sudo
-          pip3 install --break-system-packages websocket-client
+          python3 -m pip install websocket-client || \
+            python3 -m pip install --break-system-packages websocket-client
 
       - name: Run build-linux.sh
         env:
