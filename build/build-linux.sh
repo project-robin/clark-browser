@@ -14,6 +14,12 @@ PATCHES="/patches"
 OUT="/out"
 PYTHON=$(command -v python3)
 CLARK_BROWSER_TARGET="${CLARK_BROWSER_TARGET:-headless_shell}"
+
+pip_install() {
+  python3 -m pip install --quiet "$@" || \
+    python3 -m pip install --quiet --break-system-packages "$@"
+}
+
 case "$CLARK_BROWSER_TARGET" in
   headless|headless_shell) CLARK_BROWSER_TARGET="headless_shell" ;;
   chrome) CLARK_BROWSER_TARGET="chrome" ;;
@@ -168,7 +174,7 @@ GCEOF
   # depot_tools' bundled gsutil path is brittle under Python 3.12 because its
   # vendored dependency set still imports removed stdlib modules. Use the
   # pip-packaged gsutil instead, but keep depot_tools/gclient otherwise.
-  python3 -m pip install --quiet --break-system-packages "gsutil==5.35"
+  pip_install "gsutil==5.35"
   SYSTEM_GSUTIL="$(command -v gsutil)"
   python3 - "$DT/download_from_google_storage.py" "$SYSTEM_GSUTIL" <<'PY'
 import pathlib
@@ -616,7 +622,7 @@ ls -lh "$OUT/clark-browser-linux-x64.tar.gz"
 cd "$WORK/build/src"
 if [[ "${CLARK_SKIP_SMOKE:-0}" != "1" ]]; then
   echo "[clark-build] Stage 8: in-container smoke test"
-  python3 -m pip install --quiet --break-system-packages websocket-client 2>&1 | tail -3 || true
+  pip_install websocket-client 2>&1 | tail -3 || true
   SMOKE_SCRIPT="$WORK/clark-browser/tests/linux_smoke.py"
   if [[ -f "$SMOKE_SCRIPT" ]]; then
     CLARK_BINARY_PATH="$WORK/build/src/out/Default/$CLARK_BROWSER_TARGET" \
