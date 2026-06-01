@@ -40,7 +40,7 @@ CMD=(docker run --name "$CONTAINER_NAME"
   -v "$HERE/build-linux.sh":/usr/local/bin/build-linux.sh:ro
   -v "$OUT_DIR":/out
   -e "CLARK_WORK_DIR=/work"
-  -e "CLARK_BROWSER_TARGET=${CLARK_BROWSER_TARGET:-headless_shell}"
+  -e "CLARK_BROWSER_TARGET=${CLARK_BROWSER_TARGET:-chrome}"
 )
 if [[ -n "$MEMORY_LIMIT" ]]; then
   CMD+=(--memory="$MEMORY_LIMIT")

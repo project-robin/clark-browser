@@ -631,8 +631,66 @@ def test_download_url_uses_current_stealth_release(monkeypatch) -> None:
     assert (
         config.get_download_url()
         == "https://github.com/clark-labs-inc/clark-browser/releases/download/"
-        "chromium-v148.0.7778.96-stealth4/clark-browser-linux-x64.tar.gz"
+        "chromium-v148.0.7778.96-stealth5/clark-browser-linux-x64.tar.gz"
     )
+
+
+def test_windows_download_url_uses_zip_archive(monkeypatch) -> None:
+    from clarkbrowser import config
+    monkeypatch.setattr(config.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(config.platform, "machine", lambda: "AMD64")
+
+    assert config.get_platform_tag() == "windows-x64"
+    assert config.get_binary_path().name == "chrome.exe"
+    assert config.get_archive_name() == "clark-browser-windows-x64.zip"
+    assert (
+        config.get_download_url()
+        == "https://github.com/clark-labs-inc/clark-browser/releases/download/"
+        "chromium-v148.0.7778.96-stealth5/clark-browser-windows-x64.zip"
+    )
+
+
+def test_windows_build_packages_side_by_side_manifests() -> None:
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "build" / "build-windows.ps1"
+    text = script.read_text()
+
+    assert '".manifest"' in text
+    assert '".xml"' in text
+
+
+def test_zip_archive_extracts_and_flattens_single_dir(monkeypatch, tmp_path) -> None:
+    import zipfile
+    from clarkbrowser import config
+    from clarkbrowser import download
+
+    monkeypatch.setattr(config.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(config.platform, "machine", lambda: "AMD64")
+    monkeypatch.setattr(download.platform, "system", lambda: "Windows")
+    archive = tmp_path / "clark-browser-windows-x64.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("clark-browser-windows-x64/chrome.exe", "binary")
+        zf.writestr("clark-browser-windows-x64/resources.pak", "pak")
+    dest = tmp_path / "extract"
+
+    download._extract_archive(archive, dest)
+
+    assert (dest / "chrome.exe").exists()
+    assert (dest / "resources.pak").exists()
+
+
+def test_zip_archive_rejects_path_traversal(tmp_path) -> None:
+    import pytest
+    import zipfile
+    from clarkbrowser import download
+
+    archive = tmp_path / "bad.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("../extract2/chrome.exe", "binary")
+
+    with pytest.raises(RuntimeError, match="Archive path traversal"):
+        download._extract_archive(archive, tmp_path / "extract")
 
 
 def test_linux_binary_path_prefers_chrome_tarball(monkeypatch) -> None:

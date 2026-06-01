@@ -15,6 +15,7 @@ import stat
 import subprocess
 import tarfile
 import tempfile
+import zipfile
 from pathlib import Path
 
 import httpx
@@ -116,6 +117,21 @@ def _extract_archive(archive_path: Path, dest_dir: Path) -> None:
         shutil.rmtree(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
 
+    if archive_path.suffix == ".zip":
+        _extract_zip_archive(archive_path, dest_dir)
+    else:
+        _extract_tar_archive(archive_path, dest_dir)
+
+    _flatten_single_subdir(dest_dir)
+
+    bp = get_binary_path()
+    if bp.exists():
+        _make_executable(bp)
+    if platform.system() == "Darwin" and bp.exists():
+        _remove_quarantine(dest_dir)
+
+
+def _extract_tar_archive(archive_path: Path, dest_dir: Path) -> None:
     with tarfile.open(archive_path, "r:gz") as tar:
         safe = []
         for member in tar.getmembers():
@@ -134,13 +150,17 @@ def _extract_archive(archive_path: Path, dest_dir: Path) -> None:
             safe.append(member)
         tar.extractall(dest_dir, members=safe)
 
-    _flatten_single_subdir(dest_dir)
 
-    bp = get_binary_path()
-    if bp.exists():
-        _make_executable(bp)
-    if platform.system() == "Darwin" and bp.exists():
-        _remove_quarantine(dest_dir)
+def _extract_zip_archive(archive_path: Path, dest_dir: Path) -> None:
+    root = dest_dir.resolve()
+    with zipfile.ZipFile(archive_path) as archive:
+        for member in archive.infolist():
+            rp = (dest_dir / member.filename).resolve()
+            try:
+                rp.relative_to(root)
+            except ValueError:
+                raise RuntimeError(f"Archive path traversal: {member.filename}")
+            archive.extract(member, dest_dir)
 
 
 def _flatten_single_subdir(dest_dir: Path) -> None:

@@ -13,7 +13,7 @@ WORK="${CLARK_WORK_DIR:-/work}"
 PATCHES="/patches"
 OUT="/out"
 PYTHON=$(command -v python3)
-CLARK_BROWSER_TARGET="${CLARK_BROWSER_TARGET:-headless_shell}"
+CLARK_BROWSER_TARGET="${CLARK_BROWSER_TARGET:-chrome}"
 
 pip_install() {
   python3 -m pip install --quiet "$@" || \

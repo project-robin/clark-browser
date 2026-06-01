@@ -19,12 +19,13 @@ from ._version import __version__
 # Updated when we rebase against a newer upstream + ungoogled-chromium tag.
 # ---------------------------------------------------------------------------
 CHROMIUM_VERSION = "148.0.7778.96"
-CHROMIUM_RELEASE_TAG = "chromium-v148.0.7778.96-stealth4"
+CHROMIUM_RELEASE_TAG = "chromium-v148.0.7778.96-stealth5"
 
 PLATFORM_CHROMIUM_VERSIONS: dict[str, str] = {
     "linux-x64": CHROMIUM_VERSION,
     "darwin-arm64": CHROMIUM_VERSION,
     "darwin-x64": CHROMIUM_VERSION,
+    "windows-x64": CHROMIUM_VERSION,
 }
 
 # Playwright default args we suppress — they leak automation signals.
@@ -370,6 +371,8 @@ SUPPORTED_PLATFORMS: dict[tuple[str, str], str] = {
     ("Linux", "x86_64"): "linux-x64",
     ("Darwin", "arm64"): "darwin-arm64",
     ("Darwin", "x86_64"): "darwin-x64",
+    ("Windows", "AMD64"): "windows-x64",
+    ("Windows", "x86_64"): "windows-x64",
 }
 
 AVAILABLE_PLATFORMS: set[str] = set(PLATFORM_CHROMIUM_VERSIONS.keys())
@@ -416,6 +419,8 @@ def get_binary_path(version: str | None = None) -> Path:
     binary_dir = get_binary_dir(version)
     if platform.system() == "Darwin":
         return binary_dir / "Chromium.app" / "Contents" / "MacOS" / "Chromium"
+    if platform.system() == "Windows":
+        return binary_dir / "chrome.exe"
     chrome = binary_dir / "chrome"
     headless = binary_dir / "headless_shell"
     if chrome.exists() or not headless.exists():
@@ -437,13 +442,16 @@ DOWNLOAD_BASE_URL = os.environ.get(
 )
 
 
-def get_archive_ext() -> str:
+def get_archive_ext(tag: str | None = None) -> str:
+    platform_tag = tag or get_platform_tag()
+    if platform_tag == "windows-x64":
+        return ".zip"
     return ".tar.gz"
 
 
 def get_archive_name(tag: str | None = None) -> str:
     t = tag or get_platform_tag()
-    return f"clark-browser-{t}{get_archive_ext()}"
+    return f"clark-browser-{t}{get_archive_ext(t)}"
 
 
 def get_download_url(version: str | None = None) -> str:
