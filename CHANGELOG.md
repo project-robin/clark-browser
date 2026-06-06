@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 — fingerprint plumbing fixes + audio noise (June 2026)
+
 - Added `patches/0007-user-agent-client-hints-from-cli.patch` so
   `navigator.userAgentData` / UA Client Hints follow
   `--fingerprint-platform`, `--fingerprint-platform-version`,
