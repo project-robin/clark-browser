@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.1 — patch bump (June 2026)
+
 ## 0.2.0 — fingerprint plumbing fixes + audio noise (June 2026)
 
 - Added `patches/0007-user-agent-client-hints-from-cli.patch` so
