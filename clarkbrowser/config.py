@@ -31,8 +31,23 @@ PLATFORM_CHROMIUM_VERSIONS: dict[str, str] = {
 # Playwright default args we suppress — they leak automation signals.
 IGNORE_DEFAULT_ARGS = ["--enable-automation", "--enable-unsafe-swiftshader"]
 
-# Default viewport — realistic maximized Chrome on 1080p.
+# Default viewport — used as a fallback when the seed-derived screen size
+# is not available (e.g. stealth_args=False without explicit screen switches).
 DEFAULT_VIEWPORT = {"width": 1920, "height": 947}
+
+# Screen-size pool — must match the C++ pool in patches/000-shared/clark_seed.cc.
+# The launcher picks deterministically from this pool so the Playwright viewport
+# and the binary's screen.width/height never disagree.
+SCREEN_SIZE_POOL: tuple[tuple[int, int], ...] = (
+    (1920, 1080),
+    (1536, 864),
+    (2560, 1440),
+    (1366, 768),
+    (1440, 900),
+)
+
+# Taskbar height per platform — must match clark::seed::TaskbarHeight().
+PLATFORM_TASKBAR_HEIGHTS: dict[str, int] = {"windows": 48, "macos": 95, "linux": 0}
 
 
 # UA strings matched to --fingerprint-platform. Chromium reads the HTTP
@@ -140,6 +155,61 @@ def _get_env(name: str) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def _hash_seed_index(seed: str, key: str, modulus: int) -> int:
+    """Deterministic (seed, key) → [0, modulus). Uses SHA-256 so the mapping
+    is stable across Python versions and processes. Does NOT need to match the
+    C++ SipHash — when the launcher passes --fingerprint-screen-{width,height}
+    explicitly, the binary uses those values directly."""
+    digest = sha256(f"{seed}|{key}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "little") % modulus
+
+
+def pick_screen_size(seed: str) -> tuple[int, int]:
+    """Pick a coherent (width, height) pair from the pool for a given seed."""
+    return SCREEN_SIZE_POOL[_hash_seed_index(seed, "screen", len(SCREEN_SIZE_POOL))]
+
+
+def get_taskbar_height(fp_platform: str | None = None) -> int:
+    """Taskbar height for a platform — matches clark::seed::TaskbarHeight()."""
+    platform_key = (fp_platform or get_default_fingerprint_platform()).lower()
+    return PLATFORM_TASKBAR_HEIGHTS.get(platform_key, 48)
+
+
+def get_screen_from_args(args: list[str]) -> tuple[int, int] | None:
+    """Extract (width, height) from --fingerprint-screen-{width,height} args."""
+    w = h = None
+    for arg in args:
+        key, sep, value = arg.partition("=")
+        if not sep:
+            continue
+        if key == "--fingerprint-screen-width":
+            w = int(value) if value.isdigit() else None
+        elif key == "--fingerprint-screen-height":
+            h = int(value) if value.isdigit() else None
+    if w and h:
+        return (w, h)
+    return None
+
+
+def get_viewport_from_args(args: list[str]) -> dict[str, int]:
+    """Derive a Playwright viewport dict from resolved stealth args.
+
+    The viewport (window.innerWidth/innerHeight) is set to screen.width ×
+    (screen.height − taskbar) so it stays coherent with the binary's
+    screen.* and window.outer* values.
+    """
+    screen = get_screen_from_args(args)
+    if screen:
+        fp_platform = None
+        for arg in args:
+            key, sep, value = arg.partition("=")
+            if sep and key == "--fingerprint-platform":
+                fp_platform = value
+        taskbar = get_taskbar_height(fp_platform)
+        return {"width": screen[0], "height": screen[1] - taskbar}
+    return dict(DEFAULT_VIEWPORT)
 
 
 def _font_files(fonts_dir: Path) -> list[Path]:
@@ -326,6 +396,7 @@ def get_default_stealth_args() -> list[str]:
     The patched binary auto-generates the rest from --fingerprint=<seed>.
     """
     seed = random.randint(10000, 99999)
+    seed_str = str(seed)
     fp_platform = get_default_fingerprint_platform()
     fonts_dir = get_fingerprint_fonts_dir(fp_platform)
     if fp_platform == "windows" and platform.system() != "Windows" and not fonts_dir:
@@ -336,6 +407,7 @@ def get_default_stealth_args() -> list[str]:
             f"{FINGERPRINT_PLATFORM_ENV}=linux."
         )
 
+    screen_w, screen_h = pick_screen_size(seed_str)
     args = [
         "--no-sandbox",
         f"--fingerprint={seed}",
@@ -344,6 +416,10 @@ def get_default_stealth_args() -> list[str]:
         f"--fingerprint-brand-version={_CHROMIUM_BROWSER_VERSION}",
         f"--user-agent={PLATFORM_USER_AGENTS[fp_platform]}",
         "--accept-lang=en-US,en",
+        # Pin screen dimensions so the Playwright viewport and the binary's
+        # screen.width/height stay coherent (patch #11 picks these up).
+        f"--fingerprint-screen-width={screen_w}",
+        f"--fingerprint-screen-height={screen_h}",
         # Ungoogled runtime noise switches are intentionally opt-in upstream;
         # Clark enables them by default and patch #50 forwards them to renderers.
         "--fingerprinting-client-rects-noise",

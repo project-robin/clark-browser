@@ -89,7 +89,7 @@ collapse to **enabling and re-keying** existing features — see specs.
 | # | Patch | Idea source | Category | Status |
 |---|---|---|---|---|
 | 26 | AudioContext output noise (deterministic per seed) | Brave audio farbling (MPL-2.0) | 🟠 | spec |
-| 27 | AnalyserNode output noise | Brave | 🟠 | spec |
+| 27 | AnalyserNode output noise | Brave | 🟠 | `patches/0027-...` |
 | 28 | AudioBuffer.getChannelData noise | Brave | 🟠 | spec |
 
 ## F. Fonts (Moderate — fresh, but needs filesystem prep)
@@ -140,7 +140,7 @@ collapse to **enabling and re-keying** existing features — see specs.
 |---|---|---|---|---|
 | 45 | UA in headless mode = full Chrome (no "HeadlessChrome") | upstream UA infra | 🟢 | `patches/0045-...` |
 | 46 | `--enable-automation` removed from default args | Playwright config | 🟢 | already done via wrapper |
-| 47 | `cdc_` globals not injected | DevTools binding | 🟢 | spec |
+| 47 | `cdc_` globals not injected | DevTools binding | 🟢 | `patches/0047-...` |
 | 48 | `window.navigator.permissions.query({name:'notifications'})` consistency | Permissions spec | 🟡 | spec |
 
 ## L. WebGPU / Modern (Trivial)

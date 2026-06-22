@@ -26,12 +26,15 @@ from .config import (
     WEBGPU_UNSAFE_ENABLE_SWITCH,
     WEBRTC_FORCE_IP_HANDLING_SWITCH,
     WEBRTC_IP_HANDLING_POLICY_SWITCH,
+    WEBRTC_POLICY_ENV,
+    WEBRTC_PROXY_COHERENT_POLICY,
     WINDOWS_FONTS_DIR_ENV,
     FINGERPRINT_FONTS_DIR_SWITCH,
     get_default_stealth_args,
     get_fingerprint_fonts_dir,
     get_fontconfig_env_for_args,
     get_fingerprint_network_profile,
+    get_viewport_from_args,
     normalize_webgpu_policy,
     normalize_webrtc_policy,
     validate_fingerprint_fonts_dir,
@@ -64,6 +67,7 @@ def _resolve_args(
     webrtc_policy: str | None,
     webgpu_policy: str | None,
     headless: bool,
+    proxy: str | ProxySettings | None = None,
 ) -> list[str]:
     """Merge stealth defaults + user args + dedicated params."""
     seen: dict[str, str] = {}
@@ -94,7 +98,7 @@ def _resolve_args(
         seen["--fingerprint-network-profile"] = (
             f"--fingerprint-network-profile={network_profile}"
         )
-    _cohere_webrtc_policy_args(seen, webrtc_policy)
+    _cohere_webrtc_policy_args(seen, webrtc_policy, proxy)
     _cohere_webgpu_policy_args(seen, webgpu_policy, headless, stealth_args)
 
     if stealth_args:
@@ -180,7 +184,9 @@ def _cohere_network_args(args: dict[str, str]) -> None:
 
 
 def _cohere_webrtc_policy_args(
-    args: dict[str, str], webrtc_policy: str | None
+    args: dict[str, str],
+    webrtc_policy: str | None,
+    proxy: str | ProxySettings | None = None,
 ) -> None:
     if (
         WEBRTC_FORCE_IP_HANDLING_SWITCH in args
@@ -195,6 +201,18 @@ def _cohere_webrtc_policy_args(
         )
         args[WEBRTC_IP_HANDLING_POLICY_SWITCH] = (
             f"{WEBRTC_IP_HANDLING_POLICY_SWITCH}={policy}"
+        )
+        return
+
+    # No explicit policy from param or env. When a proxy is configured,
+    # default to proxy-coherent so WebRTC does not leak the host IP outside
+    # the proxy tunnel — a common bot-detection signal.
+    if proxy and not os.environ.get(WEBRTC_POLICY_ENV):
+        args[WEBRTC_FORCE_IP_HANDLING_SWITCH] = (
+            f"{WEBRTC_FORCE_IP_HANDLING_SWITCH}={WEBRTC_PROXY_COHERENT_POLICY}"
+        )
+        args[WEBRTC_IP_HANDLING_POLICY_SWITCH] = (
+            f"{WEBRTC_IP_HANDLING_POLICY_SWITCH}={WEBRTC_PROXY_COHERENT_POLICY}"
         )
 
 
@@ -285,6 +303,7 @@ def launch(
         webrtc_policy,
         webgpu_policy,
         headless,
+        proxy,
     )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
     kwargs = _cohere_browser_env(chrome_args, kwargs)
@@ -328,6 +347,7 @@ async def launch_async(
         webrtc_policy,
         webgpu_policy,
         headless,
+        proxy,
     )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
     kwargs = _cohere_browser_env(chrome_args, kwargs)
@@ -362,22 +382,28 @@ def launch_context(
     **kwargs: Any,
 ) -> Any:
     """Launch + new_context() in one call. Returns BrowserContext."""
+    chrome_args = _resolve_args(
+        args,
+        stealth_args,
+        timezone,
+        locale,
+        network_profile,
+        webrtc_policy,
+        webgpu_policy,
+        headless,
+        proxy,
+    )
     browser = launch(
         headless=headless,
         proxy=proxy,
-        args=args,
-        stealth_args=stealth_args,
-        timezone=timezone,
-        locale=locale,
-        network_profile=network_profile,
-        webrtc_policy=webrtc_policy,
-        webgpu_policy=webgpu_policy,
+        args=chrome_args,
+        stealth_args=False,
     )
     ctx_kwargs: dict[str, Any] = {}
     if user_agent:
         ctx_kwargs["user_agent"] = user_agent
     if viewport is _VIEWPORT_UNSET:
-        ctx_kwargs["viewport"] = DEFAULT_VIEWPORT
+        ctx_kwargs["viewport"] = get_viewport_from_args(chrome_args)
     elif viewport is None:
         ctx_kwargs["no_viewport"] = True
     else:
@@ -411,22 +437,28 @@ async def launch_context_async(
     **kwargs: Any,
 ) -> Any:
     """Async launch_context()."""
+    chrome_args = _resolve_args(
+        args,
+        stealth_args,
+        timezone,
+        locale,
+        network_profile,
+        webrtc_policy,
+        webgpu_policy,
+        headless,
+        proxy,
+    )
     browser = await launch_async(
         headless=headless,
         proxy=proxy,
-        args=args,
-        stealth_args=stealth_args,
-        timezone=timezone,
-        locale=locale,
-        network_profile=network_profile,
-        webrtc_policy=webrtc_policy,
-        webgpu_policy=webgpu_policy,
+        args=chrome_args,
+        stealth_args=False,
     )
     ctx_kwargs: dict[str, Any] = {}
     if user_agent:
         ctx_kwargs["user_agent"] = user_agent
     if viewport is _VIEWPORT_UNSET:
-        ctx_kwargs["viewport"] = DEFAULT_VIEWPORT
+        ctx_kwargs["viewport"] = get_viewport_from_args(chrome_args)
     elif viewport is None:
         ctx_kwargs["no_viewport"] = True
     else:
@@ -473,6 +505,7 @@ def launch_persistent_context(
         webrtc_policy,
         webgpu_policy,
         headless,
+        proxy,
     )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
     kwargs = _cohere_browser_env(chrome_args, kwargs)
@@ -482,7 +515,7 @@ def launch_persistent_context(
     if user_agent:
         ctx_kwargs["user_agent"] = user_agent
     if viewport is _VIEWPORT_UNSET:
-        ctx_kwargs["viewport"] = DEFAULT_VIEWPORT
+        ctx_kwargs["viewport"] = get_viewport_from_args(chrome_args)
     elif viewport is None:
         ctx_kwargs["no_viewport"] = True
     else:
@@ -529,6 +562,7 @@ async def launch_persistent_context_async(
         webrtc_policy,
         webgpu_policy,
         headless,
+        proxy,
     )
     proxy_kwargs = {"proxy": proxy} if proxy else {}
     kwargs = _cohere_browser_env(chrome_args, kwargs)
@@ -538,7 +572,7 @@ async def launch_persistent_context_async(
     if user_agent:
         ctx_kwargs["user_agent"] = user_agent
     if viewport is _VIEWPORT_UNSET:
-        ctx_kwargs["viewport"] = DEFAULT_VIEWPORT
+        ctx_kwargs["viewport"] = get_viewport_from_args(chrome_args)
     elif viewport is None:
         ctx_kwargs["no_viewport"] = True
     else:

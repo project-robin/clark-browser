@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Added `patches/0047-suppress-cdc-globals.patch` — a V8 extension that
+  strips `cdc_*`, `__webdriver*`, `__selenium*`, and `__$webdriver*`
+  automation globals from `globalThis` at context creation, preventing
+  CDP/ChromeDriver-injected globals from being visible to detection scripts.
+- Added `patches/0027-analyser-node-noise.patch` — seed-derived per-bin
+  noise on `AnalyserNode.getFloatFrequencyData` and `getByteFrequencyData`,
+  closing the audio fingerprint gap where sites read the frequency domain
+  directly instead of the AudioContext destination buffer.
+- The launcher now defaults `webrtc_policy` to `proxy-coherent` when a
+  `proxy` is configured, preventing WebRTC from leaking the host IP outside
+  the proxy tunnel. Explicit `webrtc_policy` param or `CLARK_WEBRTC_POLICY`
+  env var still takes precedence.
+- The launcher now pins `--fingerprint-screen-width` and
+  `--fingerprint-screen-height` from a seed-derived screen-size pool so the
+  Playwright viewport (`window.innerWidth/innerHeight`) and the binary's
+  `screen.width/height` stay coherent. `launch_context()` and
+  `launch_persistent_context()` derive the default viewport from these
+  values instead of using a hardcoded 1920x947.
+- Added `tests/tls_fingerprint.py` — a TLS ClientHello capture harness that
+  parses JA3/JA4 fingerprints from the Clark-stealth binary and compares
+  against a known real-Chrome baseline.
+
 ## 0.2.1 — patch bump (June 2026)
 
 ## 0.2.0 — fingerprint plumbing fixes + audio noise (June 2026)

@@ -709,3 +709,127 @@ def test_linux_binary_path_keeps_headless_fallback(monkeypatch, tmp_path) -> Non
     binary_dir.mkdir(parents=True)
     (binary_dir / "headless_shell").touch()
     assert config.get_binary_path().name == "headless_shell"
+
+
+def test_proxy_defaults_webrtc_to_proxy_coherent(monkeypatch) -> None:
+    from clarkbrowser import browser, config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_WINDOWS_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
+    monkeypatch.delenv("CLARK_WEBRTC_POLICY", raising=False)
+
+    args = browser._resolve_args(
+        [], True, None, None, None, None, None, True,
+        proxy="http://proxy:8080",
+    )
+
+    assert "--force-webrtc-ip-handling-policy=disable_non_proxied_udp" in args
+    assert "--webrtc-ip-handling-policy=disable_non_proxied_udp" in args
+
+
+def test_proxy_with_explicit_webrtc_policy_wins(monkeypatch) -> None:
+    from clarkbrowser import browser, config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_WINDOWS_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
+    monkeypatch.delenv("CLARK_WEBRTC_POLICY", raising=False)
+
+    args = browser._resolve_args(
+        [], True, None, None, None, "default", None, True,
+        proxy="http://proxy:8080",
+    )
+
+    assert "--force-webrtc-ip-handling-policy=disable_non_proxied_udp" not in args
+
+
+def test_proxy_with_env_off_does_not_default_coherent(monkeypatch) -> None:
+    from clarkbrowser import browser, config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_WINDOWS_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
+    monkeypatch.setenv("CLARK_WEBRTC_POLICY", "off")
+
+    args = browser._resolve_args(
+        [], True, None, None, None, None, None, True,
+        proxy="http://proxy:8080",
+    )
+
+    assert not any(
+        a.startswith("--force-webrtc-ip-handling-policy=") for a in args
+    )
+
+
+def test_no_proxy_no_webrtc_default(monkeypatch) -> None:
+    from clarkbrowser import browser, config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_WINDOWS_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
+    monkeypatch.delenv("CLARK_WEBRTC_POLICY", raising=False)
+
+    args = browser._resolve_args(
+        [], True, None, None, None, None, None, True,
+    )
+
+    assert not any(
+        a.startswith("--force-webrtc-ip-handling-policy=") for a in args
+    )
+
+
+def test_stealth_args_include_screen_dimensions(monkeypatch) -> None:
+    from clarkbrowser import config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.delenv("CLARK_FINGERPRINT_PLATFORM", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_WINDOWS_FONTS_DIR", raising=False)
+    monkeypatch.delenv("CLARK_FINGERPRINT_NETWORK_PROFILE", raising=False)
+
+    args = config.get_default_stealth_args()
+
+    assert any(a.startswith("--fingerprint-screen-width=") for a in args)
+    assert any(a.startswith("--fingerprint-screen-height=") for a in args)
+
+
+def test_screen_size_deterministic_for_seed() -> None:
+    from clarkbrowser import config
+    s1 = config.pick_screen_size("42069")
+    s2 = config.pick_screen_size("42069")
+    assert s1 == s2
+    assert s1 in config.SCREEN_SIZE_POOL
+
+
+def test_viewport_from_args_matches_screen(monkeypatch) -> None:
+    from clarkbrowser import config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    args = [
+        "--fingerprint-screen-width=2560",
+        "--fingerprint-screen-height=1440",
+        "--fingerprint-platform=linux",
+    ]
+    vp = config.get_viewport_from_args(args)
+    assert vp == {"width": 2560, "height": 1440}
+
+
+def test_viewport_from_args_windows_subtracts_taskbar(monkeypatch) -> None:
+    from clarkbrowser import config
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    args = [
+        "--fingerprint-screen-width=1920",
+        "--fingerprint-screen-height=1080",
+        "--fingerprint-platform=windows",
+    ]
+    vp = config.get_viewport_from_args(args)
+    assert vp == {"width": 1920, "height": 1032}
+
+
+def test_viewport_from_args_falls_back_without_screen() -> None:
+    from clarkbrowser import config
+    vp = config.get_viewport_from_args([])
+    assert vp == config.DEFAULT_VIEWPORT

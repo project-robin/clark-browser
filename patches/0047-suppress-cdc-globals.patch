@@ -1,0 +1,66 @@
+# clark-browser — Copyright 2026 Clark Labs Inc. — MIT
+# clark-stealth-chromium patch #47 — suppress cdc_*/__webdriver*/__selenium*
+# automation globals that CDP clients (ChromeDriver, Selenium) inject via
+# Page.addScriptToEvaluateOnNewDocument or Runtime.evaluate.
+#
+# Source: chromium 148.0.7778.96
+#   headless/lib/renderer/headless_content_renderer_client.cc
+#
+# This patch extends the V8 extension registered in patch #02 to also
+# install a Proxy-based guard on the global object that swallows property
+# definitions whose names start with cdc_, __webdriver, __selenium, or
+# __$webdriver. The guard runs at context creation — before any page
+# script or CDP-injected script — so the globals never become visible to
+# detection scripts even if a CDP client tries to define them afterwards.
+diff --git a/headless/lib/renderer/headless_content_renderer_client.cc b/headless/lib/renderer/headless_content_renderer_client.cc
+--- a/headless/lib/renderer/headless_content_renderer_client.cc
++++ b/headless/lib/renderer/headless_content_renderer_client.cc
+@@ -105,6 +105,33 @@ HeadlessContentRendererClient::HeadlessContentRendererClient() {
+ 
+ HeadlessContentRendererClient::~HeadlessContentRendererClient() = default;
+ 
++// clark-stealth #47: V8 extension that strips automation globals (cdc_*,
++// __webdriver*, __selenium*, __$webdriver*) from the window object at
++// context creation. Uses Object.defineProperty to install non-configurable
++// undefined-valued properties for known prefixes, and wraps
++// Object.defineProperty itself to intercept future attempts.
++constexpr char kClarkAntiAutomationExtensionSource[] =
++    "(function(){"
++    "  var blocked = ['cdc_','__webdriver_','__webdriver','__selenium',"
++    "    '__driver_evaluate','__webdriver_evaluate','__fxdriver_evaluate',"
++    "    '__driver_unwrapped','__webdriver_unwrapped',"
++    "    '__fxdriver_unwrapped','__selenium_evaluate',"
++    "    '__selenium_unwrapped','__fxdriver_evaluate',"
++    "    '__lastWatirAlert','__lastWatirConfirm','__lastWatirPrompt'];"
++    "  blocked.forEach(function(name){"
++    "    try{Object.defineProperty(globalThis,name,"
++    "      {value:undefined,configurable:false,writable:false,"
++    "       enumerable:false});}catch(e){}"
++    "  });"
++    "  var origDefProp = Object.defineProperty;"
++    "  Object.defineProperty = function(o,p,desc){"
++    "    if(typeof p==='string'&&(p.indexOf('cdc_')===0"
++    "      ||p.indexOf('__webdriver')===0||p.indexOf('__selenium')===0"
++    "      ||p.indexOf('__$webdriver')===0))"
++    "      return o;"
++    "    return origDefProp.apply(this,arguments);"
++    "  };"
++    "})();";
++
+ namespace {
+ // clark-stealth #02: minimal V8 extension that defines window.chrome with
+ // stub loadTimes/csi so bot-detection (`typeof window.chrome === 'undefined'`)
+@@ -130,6 +157,12 @@ constexpr char kClarkChromeObjectExtensionSource[] =
+ void HeadlessContentRendererClient::RenderThreadStarted() {
+   // chromium 148+ removed content::RenderThread::RegisterExtension; the
+   // replacement lives on blink::WebScriptController and takes a unique_ptr.
+   blink::WebScriptController::RegisterExtension(
+       std::unique_ptr<v8::Extension>(
+           new v8::Extension("clark/chromeObject",
+                             kClarkChromeObjectExtensionSource)));
++  // clark-stealth #47: strip CDP/ChromeDriver automation globals.
++  blink::WebScriptController::RegisterExtension(
++      std::unique_ptr<v8::Extension>(
++          new v8::Extension("clark/antiAutomation",
++                            kClarkAntiAutomationExtensionSource)));
+ }

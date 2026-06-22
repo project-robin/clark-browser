@@ -31,8 +31,11 @@ from .browser import (
 )
 from .config import (
     DEFAULT_VIEWPORT,
+    SCREEN_SIZE_POOL,
     get_default_stealth_args,
     get_chromium_version,
+    get_viewport_from_args,
+    pick_screen_size,
 )
 from .download import ensure_binary, binary_info, clear_cache
 from .hygiene import (
@@ -51,8 +54,11 @@ __all__ = [
     "launch_persistent_context",
     "launch_persistent_context_async",
     "DEFAULT_VIEWPORT",
+    "SCREEN_SIZE_POOL",
     "get_default_stealth_args",
     "get_chromium_version",
+    "get_viewport_from_args",
+    "pick_screen_size",
     "ensure_binary",
     "binary_info",
     "clear_cache",
