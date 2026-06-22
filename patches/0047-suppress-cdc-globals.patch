@@ -7,18 +7,14 @@
 #
 # Extends the V8 extension registered in patch #02 to also install a guard
 # on the global object that blocks definitions whose names start with cdc_,
-# __webdriver, __selenium, or __$webdriver. Runs at context creation —
-# before any page script or CDP-injected script.
+# __webdriver, __selenium, or __$webdriver. Runs at context creation.
 diff --git a/headless/lib/renderer/headless_content_renderer_client.cc b/headless/lib/renderer/headless_content_renderer_client.cc
 --- a/headless/lib/renderer/headless_content_renderer_client.cc
 +++ b/headless/lib/renderer/headless_content_renderer_client.cc
-@@ -106,6 +106,28 @@ HeadlessContentRendererClient::~HeadlessContentRendererClient() = default;
+@@ -106,6 +106,35 @@
+ HeadlessContentRendererClient::~HeadlessContentRendererClient() = default;
  
  namespace {
- // clark-stealth #02: minimal V8 extension that defines window.chrome with
- // stub loadTimes/csi so bot-detection (`typeof window.chrome === 'undefined'`)
- // sees a real object. Self-contained — no chrome/renderer dependency.
-+
 +// clark-stealth #47: V8 extension that strips automation globals (cdc_*,
 +// __webdriver*, __selenium*, __$webdriver*) from the global object at
 +// context creation. Pre-defines them as non-configurable undefined so
@@ -26,12 +22,13 @@ diff --git a/headless/lib/renderer/headless_content_renderer_client.cc b/headles
 +// attempts to block CDP-injected globals.
 +constexpr char kClarkAntiAutomationExtensionSource[] =
 +    "(function(){"
-+    "  var blocked=['cdc_','__webdriver_','__webdriver','__selenium',"
-+    "    '__driver_evaluate','__webdriver_evaluate','__fxdriver_evaluate',"
-+    "    '__driver_unwrapped','__webdriver_unwrapped',"
-+    "    '__fxdriver_unwrapped','__selenium_evaluate',"
-+    "    '__selenium_unwrapped','__fxdriver_evaluate',"
-+    "    '__lastWatirAlert','__lastWatirConfirm','__lastWatirPrompt'];"
++    "  var blocked=['cdc_','__webdriver_','__webdriver',"
++    "    '__selenium','__driver_evaluate','__webdriver_evaluate',"
++    "    '__fxdriver_evaluate','__driver_unwrapped',"
++    "    '__webdriver_unwrapped','__fxdriver_unwrapped',"
++    "    '__selenium_evaluate','__selenium_unwrapped',"
++    "    '__fxdriver_evaluate','__lastWatirAlert',"
++    "    '__lastWatirConfirm','__lastWatirPrompt'];"
 +    "  blocked.forEach(function(name){"
 +    "    try{Object.defineProperty(globalThis,name,"
 +    "      {value:undefined,configurable:false,writable:false,"
@@ -40,17 +37,17 @@ diff --git a/headless/lib/renderer/headless_content_renderer_client.cc b/headles
 +    "  var origDP=Object.defineProperty;"
 +    "  Object.defineProperty=function(o,p,d){"
 +    "    if(typeof p==='string'&&(p.indexOf('cdc_')===0"
-+    "      ||p.indexOf('__webdriver')===0||p.indexOf('__selenium')===0"
++    "      ||p.indexOf('__webdriver')===0"
++    "      ||p.indexOf('__selenium')===0"
 +    "      ||p.indexOf('__$webdriver')===0))return o;"
 +    "    return origDP.apply(this,arguments);"
 +    "  };"
 +    "})();";
 +
- constexpr char kClarkChromeObjectExtensionSource[] =
-     "var chrome;"
-     "if (!chrome) chrome = {};"
-@@ -131,6 +153,11 @@ void HeadlessContentRendererClient::RenderThreadStarted() {
-   blink::WebScriptController::RegisterExtension(
+ // clark-stealth #02: minimal V8 extension that defines window.chrome with
+ // stub loadTimes/csi so bot-detection (`typeof window.chrome === 'undefined'`)
+ // sees a real object. Self-contained — no chrome/renderer dependency.
+@@ -134,6 +163,11 @@
        std::unique_ptr<v8::Extension>(
            new v8::Extension("clark/chromeObject",
                              kClarkChromeObjectExtensionSource)));
@@ -60,3 +57,5 @@ diff --git a/headless/lib/renderer/headless_content_renderer_client.cc b/headles
 +          new v8::Extension("clark/antiAutomation",
 +                            kClarkAntiAutomationExtensionSource)));
  }
+ 
+ void HeadlessContentRendererClient::RenderFrameCreated(

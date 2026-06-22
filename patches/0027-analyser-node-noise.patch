@@ -13,7 +13,7 @@
 diff --git a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc b/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
 --- a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
 +++ b/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
-@@ -20,6 +20,9 @@
+@@ -33,6 +33,9 @@
  
  #include "base/compiler_specific.h"
  #include "media/base/audio_bus.h"
@@ -23,24 +23,19 @@ diff --git a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc b/
  #include "third_party/blink/renderer/platform/audio/audio_bus.h"
  #include "third_party/blink/renderer/platform/audio/audio_utilities.h"
  #include "third_party/blink/renderer/platform/audio/vector_math.h"
-@@ -96,6 +99,21 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
+@@ -114,10 +117,20 @@
    const size_t len = std::min(source_length, destination_array->length());
    if (len > 0) {
      base::span<float> destination = destination_array->AsSpan();
-+
-+    // clark-stealth #27: perturb float frequency data with seed-derived
-+    // per-bin noise (~1e-7 relative) to break frequency-domain hashing.
-+    const bool clark_noise =
-+        base::CommandLine::ForCurrentProcess()->HasSwitch(
-+            clark::switches::kFingerprint) &&
-+        clark::seed::NoiseEnabled();
++    // clark-stealth #27: seed-derived per-bin noise on float frequency data.
 +    const uint64_t clark_h =
-+        clark_noise ? clark::seed::Hash("audio.analyser") : 0;
++        base::CommandLine::ForCurrentProcess()->HasSwitch(
++            clark::switches::kFingerprint) && clark::seed::NoiseEnabled()
++            ? clark::seed::Hash("audio.analyser") : 0;
 +    const double clark_scale =
 +        1.0 + (static_cast<double>(clark_h & 0xFFFFu) - 32768.0) * 3.0e-11;
 +    const float clark_offset = static_cast<float>(
 +        (static_cast<double>((clark_h >> 16) & 0xFFFFu) - 32768.0) * 1.0e-7);
-+
      for (unsigned i = 0; i < len; ++i) {
        const float linear_value = magnitude_buffer_[i];
        const double db_mag = audio_utilities::LinearToDecibels(linear_value);
@@ -50,29 +45,27 @@ diff --git a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc b/
      }
    }
  }
-@@ -120,6 +138,21 @@ void RealtimeAnalyser::GetByteFrequencyData(DOMUint8Array* destination_array,
+@@ -147,15 +160,27 @@
      const double min_decibels = min_decibels_;
  
      base::span<unsigned char> destination = destination_array->AsSpan();
-+
-+    // clark-stealth #27: perturb byte frequency data with +/-1 LSB
-+    // seed-derived per-bin noise before clamping to [0, UCHAR_MAX].
-+    const bool clark_noise =
-+        base::CommandLine::ForCurrentProcess()->HasSwitch(
-+            clark::switches::kFingerprint) &&
-+        clark::seed::NoiseEnabled();
++    // clark-stealth #27: seed-derived per-bin LSB noise on byte freq data.
 +    const uint64_t clark_h =
-+        clark_noise ? clark::seed::Hash("audio.analyser") : 0;
-+
++        base::CommandLine::ForCurrentProcess()->HasSwitch(
++            clark::switches::kFingerprint) && clark::seed::NoiseEnabled()
++            ? clark::seed::Hash("audio.analyser") : 0;
      for (unsigned i = 0; i < len; ++i) {
        const float linear_value = magnitude_buffer_[i];
        const double db_mag = audio_utilities::LinearToDecibels(linear_value);
-@@ -135,6 +168,14 @@ void RealtimeAnalyser::GetByteFrequencyData(DOMUint8Array* destination_array,
-       const double scaled_value =
+ 
+       // The range m_minDecibels to m_maxDecibels will be scaled to byte values
+       // from 0 to UCHAR_MAX.
+-      const double scaled_value =
++      double scaled_value =
            UCHAR_MAX * (db_mag - min_decibels) * range_scale_factor;
  
 +      // clark-stealth #27: apply per-bin LSB noise before clamping.
-+      if (clark_noise) {
++      if (clark_h) {
 +        uint64_t mix =
 +            clark_h ^ (static_cast<uint64_t>(i) * 0x9E3779B97F4A7C15ULL);
 +        scaled_value += ((mix & 1) ? 1.0 : -1.0);
