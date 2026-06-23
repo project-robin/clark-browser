@@ -95,6 +95,7 @@ jobs:
             libxcursor-dev libxext-dev libxfixes-dev libxi-dev \
             libxinerama-dev libxkbfile-dev libxrandr-dev libxrender-dev \
             libxshmfence-dev libxslt1-dev libxss-dev libxtst-dev \
+            libx11-dev libx11-xcb-dev \
             libz3-dev mesa-common-dev uuid-dev \
             bison flex gperf xz-utils zip unzip rsync file sudo
           python3 -m pip install websocket-client || \
