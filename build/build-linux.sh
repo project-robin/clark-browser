@@ -365,9 +365,8 @@ use_sysroot = true
 GNEOF
 else
   cat >> out/Default/args.gn <<'GNEOF'
-# clone.py runs gclient with `--nohooks`, so the sysroot tarball isn't
-# downloaded. Use the host glibc instead.
-use_sysroot = false
+# clone.py runs gclient with `--nohooks`, so we fetch the sysroot manually.
+use_sysroot = true
 GNEOF
 fi
 cat >> out/Default/args.gn <<'GNEOF'
@@ -516,13 +515,13 @@ if [[ ! -f buildtools/linux64/clang-format ]]; then
   fi
 fi
 
-# Cross-compile sysroot: when host=arm64 target=x64, fetch the debian
-# bookworm amd64 sysroot so chromium's compile/link finds amd64 libc and
+# Fetch the debian sysroot so chromium's compile/link finds the correct libc and
 # system headers. install-sysroot.py is idempotent — skips if already
 # installed. (The Sysroot is what we build *against*, not what we run on.)
+echo "[clark-build] Installing amd64 sysroot..."
+python3 build/linux/sysroot_scripts/install-sysroot.py --arch=amd64 2>&1 | tail -5 || true
 if [[ "$HOST_ARCH" == "arm64" ]]; then
-  echo "[clark-build] Installing amd64 sysroot for cross-compile..."
-  python3 build/linux/sysroot_scripts/install-sysroot.py --arch=amd64 2>&1 | tail -5 || true
+  echo "[clark-build] Installing arm64 sysroot for cross-compile..."
   python3 build/linux/sysroot_scripts/install-sysroot.py --arch=arm64 2>&1 | tail -5 || true
   # Chromium 148 only declares x64-host -> arm64-target v8 cross toolchains.
   # We need the reverse for arm64-host -> x64-target. Append our declaration
